@@ -1,11 +1,66 @@
 ---
-title: "Untitled"
+title: "Budapesti lakásárak elemzése"
 author: "Dittrich Levente"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Kezdeti beállítások
+
+## Használt library-k
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(psych)
+library(corrplot)
+library(lmtest)
+library(knitr)
+```
+
+## Adatok beolvasása
+
+```{r}
+df = read.csv("BP_Lakas.csv", sep = ";", dec = ",")
+kable(head(df))
+```
+
+
+## Adatok átalakítása
+
+```{r}
+df[,c(8:10)] = lapply(df[,c(8:10)], factor)
+```
+
+# Leíró statisztika, adadtok megismerése
+
+```{r}
+kable(describe(df[,-c(8:10)]))
+```
+
+```{r}
+summary(df[,8:9])
+```
+
+
+```{r}
+ggplot(df,aes(y = Kerulet, fill = Kerulet))+
+  geom_bar(position = "dodge", stat = "count")+
+  theme_minimal()+
+  theme(legend.position = "none")+
+  labs(x = "Ingatlanok száma", y = "Kerület")
+```
+
+
+## Korreláció
+
+```{r}
+corrplot(cor(df[,1:7]), addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
+```
+
+# Modellépítés
