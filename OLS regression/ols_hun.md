@@ -81,8 +81,9 @@ Látható, hogy 10 db változóm van, ezek a következők:
 Először is, átalakítom faktorrá(dummy változó) a *Delitaj*, *Buda* és
 *Kerulet* változókat, mivel az első kettő logaikai, a harmadik pedig
 kategorikus. A *Kerulet* változó annak ellenére kategorikus, hogy
-számmal szerepel az adatbázisban, azonban pl. XXI. Kerület szerepelhetne
-Csepelként is.
+számmal szerepel az adatbázisban, azonban szerepelhetnének római számmal
+vagy névvel is. Abban az esetben pl. *21* helyett Csepel vagy XXI
+szerepelne az adattáblában.
 
 ``` r
 df[,c(8:10)] = lapply(df[,c(8:10)], factor)
@@ -131,7 +132,7 @@ ggplot(df, aes(x = Buda, fill = DeliTaj))+
   scale_x_discrete(labels = c("0" = "Pest", "1" = "Buda"))+
   scale_fill_discrete(labels = c("0" = "Nem déli", "1" = "Déli"))+
   theme_minimal()+
-  labs(x = "Elhelyezkedés", y = "Lakások száma", fill = "Tájolás")
+  labs(x = "Elhelyezkedés", y = "Arány", fill = "Tájolás")
 ```
 
 ![](ols_hun_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
@@ -151,7 +152,7 @@ kable(addmargins(dummy_table))
 | Déli     |  369 |  367 |  736 |
 | Sum      |  764 |  642 | 1406 |
 
-Kevesebb Budai eladó lakás van a mintában mint pesti, azonban köztük a
+Kevesebb budai eladó lakás van a mintában mint pesti, azonban köztük a
 déli fekvésű ingatlanok aránya magasabb, mint a pesti ingatlanok
 körében.
 
@@ -166,9 +167,10 @@ ggplot(df,aes(y = Kerulet, fill = Kerulet))+
   labs(x = "Ingatlanok száma", y = "Kerület")
 ```
 
-![](ols_hun_files/figure-gfm/unnamed-chunk-8-1.png)<!-- --> Kiemelkedő
-számban találhatóak 2., 12. és 13. kerületi eladó lakások, illetve a 3.,
-6. és 14. kerületi lakások is szép számmal vannak.
+![](ols_hun_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+Kiemelkedő számban találhatóak 2., 12. és 13. kerületi eladó lakások,
+illetve a 3., 6. és 14. kerületi lakások is szép számmal vannak.
 
 # Korreláció
 
