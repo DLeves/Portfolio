@@ -11,9 +11,14 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Ebben a portfolió fejezetben OLS regresszióval fogom megbecsülni a budapesti lakások árát.
+
+Az adatokat korábban szereztem az Ökonometria I. tárgyamon, eladó budapesti lakások árát foglalja magában egyéb jellemzőiken kívül. A mintavétel évét nem ismerem, azonban az átlagos négyzetméterár a mintában 332 eFt, míg a [KSH szerint](https://www.ksh.hu/stadat_files/lak/hu/lak0025.html) 2022-ben az átlagos budapesti négyzetméterár előzetes adatok alapján 838 eFt.
+
 # Kezdeti beállítások
 
 ## Használt library-k
+
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(psych)
@@ -24,13 +29,30 @@ library(knitr)
 
 ## Adatok beolvasása
 
+Az adatok magyar .csv alapján a pontosvesszővel vannak elválasztva és a tizedesjegyek sima vesszővel vannak jelölve. A beolvasott adatok első hat megfigyelése a következőképpen néz ki: 
 ```{r}
 df = read.csv("BP_Lakas.csv", sep = ";", dec = ",")
 kable(head(df))
 ```
 
+Látható, hogy 10 db változóm van, ezek a következők:
+
+| Változó neve | Leírás                | Mértékegység  | Megjegyzés |
+|:-------------|:----------------------|:--------------|:-----------|
+| KinArMFt     | A lakás kínálati ára  | Millió Forint |            |
+| Terulet      | A lakás alapterülete  | Négyzetméter  |            |
+| Terasz       | A terasz alapterülete | Négyzetméter  |            |
+| Szoba        | A szobák száma        | Darab         |            |
+| Felszoba     | Félszobák száma       | Darab         |            |
+| Furdoszoba   | Fürdőszobák száma     | Darab         |            |
+| Emelet       | Hányadik emelet?      | Emelet        |            |
+| Delitaj      | Déli tájolású-e?      | Logikai       | 1, ha igen |
+| Buda         | Budai-e?              | Logikai       | 1, ha igen |
+| Kerulet      | Kerület               | Kerület       | [1;22]     |
 
 ## Adatok átalakítása
+
+Először is, átalakítom faktorrá(dummy változó) a *Delitaj*, *Buda* és *Kerulet* változókat, mivel az első kettő logaikai, a harmadik pedig kategorikus. A *Kerulet* változó annak ellenére kategorikus, hogy számmal szerepel az adatbázisban, azonban pl. XXI. Kerület szerepelhetne Csepelként is.
 
 ```{r}
 df[,c(8:10)] = lapply(df[,c(8:10)], factor)
@@ -42,10 +64,41 @@ df[,c(8:10)] = lapply(df[,c(8:10)], factor)
 kable(describe(df[,-c(8:10)]))
 ```
 
-```{r}
-summary(df[,8:9])
+A leíró statisztikai mutatókat az egyes változók esetében nem szándékozom külön külön értelmezni, azonban azt mindenképpen kiemelném, hogy a lakásárak jobbra elnyúlóak és a normális eloszlásnál csúcsosabbak, ezek az $\alpha_{3}$ és $\alpha_{4}$, valamint a medián és átlag kapcsolatából látszanak. Emellett lakásárak eloszlását egy hisztogrammon ábrázolva a következőtk kapjuk:
+
+```{r message=FALSE, warning=FALSE}
+ggplot(df, aes(KinArMFt))+
+  geom_histogram(fill = "cyan3")+
+  theme_minimal()+
+  labs(x = "Kínálati ár(mFt)", y = "Gyakoriság")
 ```
 
+A ábrán is látszik az erőteljes jobbra elnyúlás és a csúcsosság.
+
+A dummy változók vizualizására egy stacked barplotot alkalmaztam. 
+
+```{r}
+ggplot(df, aes(x = Buda, fill = DeliTaj))+
+  geom_bar(position = "fill")+
+  scale_y_continuous(labels = scales::percent)+
+  scale_x_discrete(labels = c("0" = "Pest", "1" = "Buda"))+
+  scale_fill_discrete(labels = c("0" = "Nem déli", "1" = "Déli"))+
+  theme_minimal()+
+  labs(x = "Elhelyezkedés", y = "Lakások száma", fill = "Tájolás")
+```
+
+Táblázatba rendezve:
+
+```{r}
+dummy_table = table(df$DeliTaj,df$Buda)
+rownames(dummy_table) = c("Nem déli", "Déli")
+colnames(dummy_table) = c("Pest","Buda")
+kable(addmargins(dummy_table))
+```
+
+Kevesebb Budai eladó lakás van a mintában mint pesti, azonban köztük a déli fekvésű ingatlanok aránya magasabb, mint a pesti ingatlanok körében.
+
+Az egyes eladó lakásokat kerületekre bontva szintén oszlopdiagrammon ábrázoltam:
 
 ```{r}
 ggplot(df,aes(y = Kerulet, fill = Kerulet))+
@@ -54,12 +107,41 @@ ggplot(df,aes(y = Kerulet, fill = Kerulet))+
   theme(legend.position = "none")+
   labs(x = "Ingatlanok száma", y = "Kerület")
 ```
+Kiemelkedő számban találhatóak 2., 12. és 13. kerületi eladó lakások, illetve a 3., 6. és 14. kerületi lakások is szép számmal vannak. 
 
-
-## Korreláció
+# Korreláció
 
 ```{r}
 corrplot(cor(df[,1:7]), addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
 ```
 
 # Modellépítés
+
+## Alapmodell
+
+```{r}
+alapmodell = lm(KinArMFt ~ .,df)
+summary(alapmodell)
+```
+
+
+## Modellszelekció
+
+```{r}
+szukitett_modell1 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+
+AIC(alapmodell, szukitett_modell1)
+BIC(alapmodell, szukitett_modell1)
+```
+
+```{r}
+szukitett_modell2 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + DeliTaj + Buda,df)
+
+waldtest(szukitett_modell1,szukitett_modell2)
+```
+
+```{r}
+szukitett_modell3 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+
+waldtest(szukitett_modell1,szukitett_modell3)
+```
