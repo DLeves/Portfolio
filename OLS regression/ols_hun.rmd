@@ -21,15 +21,18 @@ Az adatokat korábban szereztem az Ökonometria I. tárgyamon, eladó budapesti 
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
+library(knitr)
 library(psych)
 library(corrplot)
+library(ppcor)
+library(car)
 library(lmtest)
-library(knitr)
 ```
 
 ## Adatok beolvasása
 
-Az adatok magyar .csv alapján a pontosvesszővel vannak elválasztva és a tizedesjegyek sima vesszővel vannak jelölve. A beolvasott adatok első hat megfigyelése a következőképpen néz ki: 
+Az adatok magyar .csv alapján a pontosvesszővel vannak elválasztva és a tizedesjegyek sima vesszővel vannak jelölve. A beolvasott adatok első hat megfigyelése a következőképpen néz ki:
+
 ```{r}
 df = read.csv("BP_Lakas.csv", sep = ";", dec = ",")
 kable(head(df))
@@ -52,7 +55,7 @@ Látható, hogy 10 db változóm van, ezek a következők:
 
 ## Adatok átalakítása
 
-Először is, átalakítom faktorrá(dummy változó) a *Delitaj*, *Buda* és *Kerulet* változókat, mivel az első kettő logaikai, a harmadik pedig kategorikus. A *Kerulet* változó annak ellenére kategorikus, hogy számmal szerepel az adatbázisban, azonban szerepelhetnének római számmal vagy névvel is. Abban az esetben pl. *21* helyett Csepel vagy XXI szerepelne az adattáblában.
+Először is, átalakítom faktorrá(dummy változó) a *Delitaj*, *Buda* és *Kerulet* változókat, mivel az első kettő logaikai, a harmadik pedig kategorikus. A *Kerulet* változó annak ellenére kategorikus, hogy számmal szerepel az adatbázisban, azonban szerepelhetnének római számmal vagy névvel is. Abban az esetben pl. *21* helyett *Csepel* vagy *XXI* szerepelne az adattáblában.
 
 ```{r}
 df[,c(8:10)] = lapply(df[,c(8:10)], factor)
@@ -67,15 +70,24 @@ kable(describe(df[,-c(8:10)]))
 A leíró statisztikai mutatókat az egyes változók esetében nem szándékozom külön külön értelmezni, azonban azt mindenképpen kiemelném, hogy a lakásárak jobbra elnyúlóak és a normális eloszlásnál csúcsosabbak, ezek az $\alpha_{3}$ és $\alpha_{4}$, valamint a medián és átlag kapcsolatából látszanak. Emellett lakásárak eloszlását egy hisztogrammon ábrázolva a következőtk kapjuk:
 
 ```{r message=FALSE, warning=FALSE}
-ggplot(df, aes(KinArMFt))+
+ggplot(df, aes(KinArMFt)) +
+  geom_histogram(fill = "cyan3") +
+  theme_minimal()+
+  labs(x = "Kínálati ár(mFt)r", y = "Gyakoriság")
+```
+
+A ábrán is látszik az erőteljes jobbra elnyúlás és a csúcsosság. Mivel ez lesz az eredményváltozóm, érdemes lehet logaritmizálni, hogy normális eloszlású legyen a válatozó.
+
+```{r}
+ggplot(df, aes(log(KinArMFt)))+
   geom_histogram(fill = "cyan3")+
   theme_minimal()+
   labs(x = "Kínálati ár(mFt)", y = "Gyakoriság")
 ```
 
-A ábrán is látszik az erőteljes jobbra elnyúlás és a csúcsosság.
+A logaritmizált változó eloszlása már sokkal jobban hasonlít a normális eloszláshoz.
 
-A dummy változók vizualizására egy stacked barplotot alkalmaztam. 
+A dummy változók vizualizására egy stacked barplotot alkalmaztam:
 
 ```{r}
 ggplot(df, aes(x = Buda, fill = DeliTaj))+
@@ -108,41 +120,104 @@ ggplot(df,aes(y = Kerulet, fill = Kerulet))+
   labs(x = "Ingatlanok száma", y = "Kerület")
 ```
 
-Kiemelkedő számban találhatóak 2., 12. és 13. kerületi eladó lakások, illetve a 3., 6. és 14. kerületi lakások is szép számmal vannak. 
+Kiemelkedő számban találhatóak 2., 12. és 13. kerületi eladó lakások, illetve a 3., 6. és 14. kerületi lakások is szép számmal vannak.
+
+Az egyes kerületek kínálait árainak dobozábrái a következőképpen néznek ki:
+
+```{r}
+ggplot(df, aes(y = KinArMFt, x = Kerulet, col = Kerulet))+
+  geom_boxplot()+
+  theme_minimal()+
+  theme(legend.position = "none")+
+  labs(y = "Kínálati ár (mFt)", x = "Kerület")
+```
+
+Az egyes kerületek medián lakására láthatóan eltérő, sok outlier van 2., 11., 12., 14. kerületekben a nagyon magas lakásár tartományban.
+
+A kínálati ár és a terület pontdiagrammját ábrázolva az elhelyezkedés szerint a következőt kapjuk:
+
+```{r message=FALSE, warning=FALSE}
+ggplot(df, aes(Terulet,KinArMFt, col = Buda))+
+  geom_point()+
+  stat_smooth(method = lm)+
+  theme_minimal()+
+  labs(y = "Kínálati ár (mFt)", x = "Alapterület (Nm)", col = "Elhelyezkedés")+
+  scale_color_discrete(labels = c("0" = "Pest", "1" = "Buda"))
+```
+
+Látszik, hogy a budai lakások árai az alapterülethez képest meredekebben emelkednek, mint a pestieké. Érdemes lehet esetleg interakciót feltételezni az alapterület és az elhelyezkedés között a későbbi modellben.
 
 # Korreláció
+
+Az adatok együttmozgásáról készítettem először korrelogrammot:
 
 ```{r}
 corrplot(cor(df[,1:7]), addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
 ```
 
+A kínálati árral erősen korrelál pozitív irányba a lakás alapterülete és a szobák száma, illetve közepesen, szintén pozitív irányban a terasz mérete és a fürdőszobák száma. Az emelet és a félszobák számának korrelációja a kínálati árral szinte 0.\
+Nem meglepő módon erősen korrelál a terület a szobák számával, pozitív irányban.
+
+A parciális korreláció ábrázolva:
+
+```{r}
+corrplot(pcor(df[,1:7])$estimate, addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
+```
+
+Az egyéb változók hatásától megtisztított korrelációkat ábrázolva látszik, hogy a terület még így is pozitívan, közepesen korrelál a kínálati árral és a szobák számával. A szobák száma szintén közepesen, pozitívan korrelál a félszobák számával. Érdekes módon ebben az esetben a parciális korreláció a terület és a félszoba között gyengén negatív.
+
 # Modellépítés
+
+Már az adatvizualizációknál szembe ötlött, hogy érdemes lenne logaritmizálni az eredményváltozót, ezzel kezelve a jobbra elnyúlást.:\
+Ha nem logaritmizálnám az eredményváltozót, akkor a becsült egyenlet a következőképpen nézne ki:\
+$\hat{Y} = \beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}$:\
+Amennyiben azonban a logaritmizálom az eredményváltozót, úgy a becsült egyenlet a következőképpen nézne ki:\
+$log(\hat{Y})= \beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}$, amiből ha kifejezzük $\hat{Y}$-t, akkor az kapjuk, hogy:\
+$\hat{Y} = e^{\beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}}= e^{\beta_{0}} \times e^{\beta_{1}\times X_{1}} \times e^{\beta_{2}\times X_{2}} \times \dots \times e^{\beta_{n}\times X_{n}}$:\
+Látható, hogy az egyes magyarázó változók hatásai marginális hatások lesznek, azaz egy egységnyi $X_{n}$ változás hatására $\beta_{n}$-szeresével változik $\hat{Y}$. Például ha $\beta_{n} = 0,1$, akkor egységnyi $X_{n}$ növekedés hatására $\hat{Y}$ értéke 10%-kal nő.
 
 ## Alapmodell
 
+Az alapmodellben minden változó szerepel, az eredményváltozó pedig logaritmizálva van.
+
 ```{r}
-alapmodell = lm(KinArMFt ~ .,df)
+alapmodell = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda + Kerulet,df)
 summary(alapmodell)
 ```
 
+A koefficienseket ebben az esetben még nem értelmezem, azonban az R^2^ szerint a modell magyarázó ereje 79,75% és korrigált R^2^ biztatóan magas. Látszik azonban, hogy nem minden együttható bétája szignifikáns, ezeket az együtthatókat a következőkben fogom megvizsgálni és egy esetében pedig NA-t ír az R. Ez azért lehet, mert valószínüleg nem ad hozzá a modellhez semmi magyarázóerőt a 22. kerület dummy.
+
+A kerületeknél a dummy kódolás miatt az első kerületet vette alapul és a béták értelmezésénél ahhoz vannak hasonlítva a kerületek. Látható, hogy sok kerület nem tér el szignifikánsan az első kerülettől és mivel ez 21(=22-1) új változó bevonását jelenti, ezért az információs kritériumok alapján fogom eldönteni, hogy jobb-e ha kiveszem őket belőle.
 
 ## Modellszelekció
 
-```{r}
-szukitett_modell1 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben.
 
-AIC(alapmodell, szukitett_modell1)
-BIC(alapmodell, szukitett_modell1)
+```{r warning=TRUE, error=TRUE}
+vif(alapmodell)
 ```
 
-```{r}
-szukitett_modell2 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + DeliTaj + Buda,df)
+Nem fut le a VIF függvény, mégpedig azért, mert tökéletes multikollineraitás van a modellben. Ez megmagyarázza a 22. kerület NA értékét is.
+Megpróbálom a kerületek nélkül is megnézni a VIF mutatót.
 
-waldtest(szukitett_modell1,szukitett_modell2)
+
+```{r}
+vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df))
+```
+Így már lefut a VIF, azonban van a terület és a szobák számánál így is zavaró mutlikollinearitás van.
+
+```{r}
+szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+
+IC = AIC(alapmodell, szukitett_modell1)
+IC$BIC = BIC(alapmodell, szukitett_modell1)$BIC
+
+kable(IC)
 ```
 
-```{r}
-szukitett_modell3 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+Mind az AIC, mind a BIC jobban preferálja, ha a kerületek szerepelnek a magyarázó változók között. 
 
-waldtest(szukitett_modell1,szukitett_modell3)
+
+```{r}
+
 ```

@@ -1,7 +1,7 @@
 Budapesti lakásárak elemzése
 ================
 Dittrich Levente
-2023-06-07
+2023-06-08
 
 - <a href="#kezdeti-beállítások" id="toc-kezdeti-beállítások">Kezdeti
   beállítások</a>
@@ -35,10 +35,12 @@ az átlagos budapesti négyzetméterár előzetes adatok alapján 838 eFt.
 
 ``` r
 library(tidyverse)
+library(knitr)
 library(psych)
 library(corrplot)
+library(ppcor)
+library(car)
 library(lmtest)
-library(knitr)
 ```
 
 ## Adatok beolvasása
@@ -82,7 +84,7 @@ Először is, átalakítom faktorrá(dummy változó) a *Delitaj*, *Buda* és
 *Kerulet* változókat, mivel az első kettő logaikai, a harmadik pedig
 kategorikus. A *Kerulet* változó annak ellenére kategorikus, hogy
 számmal szerepel az adatbázisban, azonban szerepelhetnének római számmal
-vagy névvel is. Abban az esetben pl. *21* helyett Csepel vagy XXI
+vagy névvel is. Abban az esetben pl. *21* helyett *Csepel* vagy *XXI*
 szerepelne az adattáblában.
 
 ``` r
@@ -113,17 +115,33 @@ csúcsosabbak, ezek az $\alpha_{3}$ és $\alpha_{4}$, valamint a medián és
 hisztogrammon ábrázolva a következőtk kapjuk:
 
 ``` r
-ggplot(df, aes(KinArMFt))+
+ggplot(df, aes(KinArMFt)) +
+  geom_histogram(fill = "cyan3") +
+  theme_minimal()+
+  labs(x = "Kínálati ár(mFt)r", y = "Gyakoriság")
+```
+
+![](ols_hun_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+A ábrán is látszik az erőteljes jobbra elnyúlás és a csúcsosság. Mivel
+ez lesz az eredményváltozóm, érdemes lehet logaritmizálni, hogy normális
+eloszlású legyen a válatozó.
+
+``` r
+ggplot(df, aes(log(KinArMFt)))+
   geom_histogram(fill = "cyan3")+
   theme_minimal()+
   labs(x = "Kínálati ár(mFt)", y = "Gyakoriság")
 ```
 
-![](ols_hun_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
-A ábrán is látszik az erőteljes jobbra elnyúlás és a csúcsosság.
+![](ols_hun_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
-A dummy változók vizualizására egy stacked barplotot alkalmaztam.
+A logaritmizált változó eloszlása már sokkal jobban hasonlít a normális
+eloszláshoz.
+
+A dummy változók vizualizására egy stacked barplotot alkalmaztam:
 
 ``` r
 ggplot(df, aes(x = Buda, fill = DeliTaj))+
@@ -135,7 +153,7 @@ ggplot(df, aes(x = Buda, fill = DeliTaj))+
   labs(x = "Elhelyezkedés", y = "Arány", fill = "Tájolás")
 ```
 
-![](ols_hun_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](ols_hun_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 Táblázatba rendezve:
 
@@ -167,123 +185,205 @@ ggplot(df,aes(y = Kerulet, fill = Kerulet))+
   labs(x = "Ingatlanok száma", y = "Kerület")
 ```
 
-![](ols_hun_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](ols_hun_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 Kiemelkedő számban találhatóak 2., 12. és 13. kerületi eladó lakások,
 illetve a 3., 6. és 14. kerületi lakások is szép számmal vannak.
 
+Az egyes kerületek kínálait árainak dobozábrái a következőképpen néznek
+ki:
+
+``` r
+ggplot(df, aes(y = KinArMFt, x = Kerulet, col = Kerulet))+
+  geom_boxplot()+
+  theme_minimal()+
+  theme(legend.position = "none")+
+  labs(y = "Kínálati ár (mFt)", x = "Kerület")
+```
+
+![](ols_hun_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+Az egyes kerületek medián lakására láthatóan eltérő, sok outlier van 2.,
+11., 12., 14. kerületekben a nagyon magas lakásár tartományban.
+
+A kínálati ár és a terület pontdiagrammját ábrázolva az elhelyezkedés
+szerint a következőt kapjuk:
+
+``` r
+ggplot(df, aes(Terulet,KinArMFt, col = Buda))+
+  geom_point()+
+  stat_smooth(method = lm)+
+  theme_minimal()+
+  labs(y = "Kínálati ár (mFt)", x = "Alapterület (Nm)", col = "Elhelyezkedés")+
+  scale_color_discrete(labels = c("0" = "Pest", "1" = "Buda"))
+```
+
+![](ols_hun_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+Látszik, hogy a budai lakások árai az alapterülethez képest meredekebben
+emelkednek, mint a pestieké. Érdemes lehet esetleg interakciót
+feltételezni az alapterület és az elhelyezkedés között a későbbi
+modellben.
+
 # Korreláció
+
+Az adatok együttmozgásáról készítettem először korrelogrammot:
 
 ``` r
 corrplot(cor(df[,1:7]), addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
 ```
 
-![](ols_hun_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](ols_hun_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+A kínálati árral erősen korrelál pozitív irányba a lakás alapterülete és
+a szobák száma, illetve közepesen, szintén pozitív irányban a terasz
+mérete és a fürdőszobák száma. Az emelet és a félszobák számának
+korrelációja a kínálati árral szinte 0.  
+Nem meglepő módon erősen korrelál a terület a szobák számával, pozitív
+irányban.
+
+A parciális korreláció ábrázolva:
+
+``` r
+corrplot(pcor(df[,1:7])$estimate, addCoef.col = "black", method = "color", col = COL2("BrBG"), diag = F, type = "lower")
+```
+
+![](ols_hun_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+Az egyéb változók hatásától megtisztított korrelációkat ábrázolva
+látszik, hogy a terület még így is pozitívan, közepesen korrelál a
+kínálati árral és a szobák számával. A szobák száma szintén közepesen,
+pozitívan korrelál a félszobák számával. Érdekes módon ebben az esetben
+a parciális korreláció a terület és a félszoba között gyengén negatív.
 
 # Modellépítés
 
+Már az adatvizualizációknál szembe ötlött, hogy érdemes lenne
+logaritmizálni az eredményváltozót, ezzel kezelve a jobbra elnyúlást.:  
+Ha nem logaritmizálnám az eredményváltozót, akkor a becsült egyenlet a
+következőképpen nézne ki:  
+$\hat{Y} = \beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}$:  
+Amennyiben azonban a logaritmizálom az eredményváltozót, úgy a becsült
+egyenlet a következőképpen nézne ki:  
+$log(\hat{Y})= \beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}$,
+amiből ha kifejezzük $\hat{Y}$-t, akkor az kapjuk, hogy:  
+$\hat{Y} = e^{\beta_{0} + \beta_{1}\times X_{1} + \beta_{2}\times X_{2} + \dots + \beta_{n}\times X_{n}}= e^{\beta_{0}} \times e^{\beta_{1}\times X_{1}} \times e^{\beta_{2}\times X_{2}} \times \dots \times e^{\beta_{n}\times X_{n}}$:  
+Látható, hogy az egyes magyarázó változók hatásai marginális hatások
+lesznek, azaz egy egységnyi $X_{n}$ változás hatására
+$\beta_{n}$-szeresével változik $\hat{Y}$. Például ha $\beta_{n} = 0,1$,
+akkor egységnyi $X_{n}$ növekedés hatására $\hat{Y}$ értéke 10%-kal nő.
+
 ## Alapmodell
 
+Az alapmodellben minden változó szerepel, az eredményváltozó pedig
+logaritmizálva van.
+
 ``` r
-alapmodell = lm(KinArMFt ~ .,df)
+alapmodell = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda + Kerulet,df)
 summary(alapmodell)
 ```
 
     ## 
     ## Call:
-    ## lm(formula = KinArMFt ~ ., data = df)
+    ## lm(formula = log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + 
+    ##     Furdoszoba + Emelet + DeliTaj + Buda + Kerulet, data = df)
     ## 
     ## Residuals:
-    ##     Min      1Q  Median      3Q     Max 
-    ## -43.163  -3.835  -0.392   2.983  46.719 
+    ##      Min       1Q   Median       3Q      Max 
+    ## -2.26934 -0.17954 -0.00606  0.17294  0.90029 
     ## 
     ## Coefficients: (1 not defined because of singularities)
     ##               Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept) -10.506086   2.621016  -4.008 6.44e-05 ***
-    ## Terulet       0.281871   0.009808  28.738  < 2e-16 ***
-    ## Terasz        0.335092   0.019769  16.950  < 2e-16 ***
-    ## Szoba         0.935356   0.329309   2.840  0.00457 ** 
-    ## Felszoba     -0.328405   0.389674  -0.843  0.39950    
-    ## Furdoszoba    4.902468   0.638810   7.674 3.13e-14 ***
-    ## Emelet       -0.078995   0.127736  -0.618  0.53640    
-    ## DeliTaj1      1.255781   0.431831   2.908  0.00370 ** 
-    ## Buda1         8.267640   2.704737   3.057  0.00228 ** 
-    ## Kerulet2      4.538199   1.135324   3.997 6.75e-05 ***
-    ## Kerulet3     -1.347837   1.237375  -1.089  0.27622    
-    ## Kerulet4     -0.114208   2.913803  -0.039  0.96874    
-    ## Kerulet5     11.458411   2.701307   4.242 2.37e-05 ***
-    ## Kerulet6      2.356192   2.625260   0.898  0.36960    
-    ## Kerulet7     -0.123170   2.742339  -0.045  0.96418    
-    ## Kerulet8     -1.872243   2.890315  -0.648  0.51725    
-    ## Kerulet9      1.472501   2.732250   0.539  0.59002    
-    ## Kerulet10    -3.575215   4.328868  -0.826  0.40900    
-    ## Kerulet11    -5.334889   1.308796  -4.076 4.84e-05 ***
-    ## Kerulet12    -0.383267   1.145634  -0.335  0.73802    
-    ## Kerulet13     3.382300   2.586650   1.308  0.19123    
-    ## Kerulet14     1.623550   2.614607   0.621  0.53473    
-    ## Kerulet15    -0.099624   2.796445  -0.036  0.97159    
-    ## Kerulet16    -2.562947   3.743615  -0.685  0.49370    
-    ## Kerulet17    -4.411935   4.315825  -1.022  0.30683    
-    ## Kerulet18    -0.407510   2.877311  -0.142  0.88739    
-    ## Kerulet19    -0.254555   4.322020  -0.059  0.95304    
-    ## Kerulet20    -0.471522   4.658917  -0.101  0.91940    
-    ## Kerulet21     2.522779   6.105355   0.413  0.67952    
+    ## (Intercept)  1.9621604  0.0923880  21.238  < 2e-16 ***
+    ## Terulet      0.0071705  0.0003457  20.740  < 2e-16 ***
+    ## Terasz       0.0072086  0.0006968  10.345  < 2e-16 ***
+    ## Szoba        0.1167159  0.0116078  10.055  < 2e-16 ***
+    ## Felszoba     0.0005011  0.0137356   0.036 0.970901    
+    ## Furdoszoba  -0.0317617  0.0225174  -1.411 0.158605    
+    ## Emelet       0.0143593  0.0045026   3.189 0.001459 ** 
+    ## DeliTaj1     0.0540916  0.0152216   3.554 0.000393 ***
+    ## Buda1        0.3900818  0.0953391   4.092 4.53e-05 ***
+    ## Kerulet2     0.0935029  0.0400189   2.336 0.019610 *  
+    ## Kerulet3    -0.0739431  0.0436161  -1.695 0.090242 .  
+    ## Kerulet4    -0.0705051  0.1027084  -0.686 0.492539    
+    ## Kerulet5     0.5057620  0.0952182   5.312 1.27e-07 ***
+    ## Kerulet6     0.1165212  0.0925376   1.259 0.208180    
+    ## Kerulet7    -0.0622972  0.0966645  -0.644 0.519379    
+    ## Kerulet8    -0.1838889  0.1018805  -1.805 0.071301 .  
+    ## Kerulet9     0.0407383  0.0963088   0.423 0.672364    
+    ## Kerulet10   -0.2161953  0.1525879  -1.417 0.156751    
+    ## Kerulet11   -0.2034248  0.0461336  -4.409 1.12e-05 ***
+    ## Kerulet12   -0.0782221  0.0403824  -1.937 0.052945 .  
+    ## Kerulet13    0.1075107  0.0911766   1.179 0.238543    
+    ## Kerulet14    0.0535830  0.0921621   0.581 0.561066    
+    ## Kerulet15   -0.0337206  0.0985716  -0.342 0.732334    
+    ## Kerulet16   -0.0388148  0.1319584  -0.294 0.768692    
+    ## Kerulet17   -0.2188235  0.1521282  -1.438 0.150543    
+    ## Kerulet18   -0.0483528  0.1014221  -0.477 0.633617    
+    ## Kerulet19   -0.0690719  0.1523465  -0.453 0.650342    
+    ## Kerulet20   -0.0972550  0.1642217  -0.592 0.553802    
+    ## Kerulet21   -0.2051189  0.2152071  -0.953 0.340695    
     ## Kerulet22           NA         NA      NA       NA    
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## Residual standard error: 7.835 on 1377 degrees of freedom
-    ## Multiple R-squared:  0.844,  Adjusted R-squared:  0.8408 
-    ## F-statistic:   266 on 28 and 1377 DF,  p-value: < 2.2e-16
+    ## Residual standard error: 0.2762 on 1377 degrees of freedom
+    ## Multiple R-squared:  0.7957, Adjusted R-squared:  0.7916 
+    ## F-statistic: 191.6 on 28 and 1377 DF,  p-value: < 2.2e-16
+
+A koefficienseket ebben az esetben még nem értelmezem, azonban az
+R<sup>2</sup> szerint a modell magyarázó ereje 79,75% és korrigált
+R<sup>2</sup> biztatóan magas. Látszik azonban, hogy nem minden
+együttható bétája szignifikáns, ezeket az együtthatókat a következőkben
+fogom megvizsgálni és egy esetében pedig NA-t ír az R. Ez azért lehet,
+mert valószínüleg nem ad hozzá a modellhez semmi magyarázóerőt a 22.
+kerület dummy.
+
+A kerületeknél a dummy kódolás miatt az első kerületet vette alapul és a
+béták értelmezésénél ahhoz vannak hasonlítva a kerületek. Látható, hogy
+sok kerület nem tér el szignifikánsan az első kerülettől és mivel ez
+21(=22-1) új változó bevonását jelenti, ezért az információs kritériumok
+alapján fogom eldönteni, hogy jobb-e ha kiveszem őket belőle.
 
 ## Modellszelekció
 
-``` r
-szukitett_modell1 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
-
-AIC(alapmodell, szukitett_modell1)
-```
-
-    ##                   df      AIC
-    ## alapmodell        30 9809.387
-    ## szukitett_modell1 10 9988.164
+Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben.
 
 ``` r
-BIC(alapmodell, szukitett_modell1)
+vif(alapmodell)
 ```
 
-    ##                   df       BIC
-    ## alapmodell        30  9966.842
-    ## szukitett_modell1 10 10040.649
+    ## Error in vif.default(alapmodell): there are aliased coefficients in the model
+
+Nem fut le a VIF függvény, mégpedig azért, mert tökéletes
+multikollineraitás van a modellben. Ez megmagyarázza a 22. kerület NA
+értékét is. Megpróbálom a kerületek nélkül is megnézni a VIF mutatót.
 
 ``` r
-szukitett_modell2 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + DeliTaj + Buda,df)
-
-waldtest(szukitett_modell1,szukitett_modell2)
+vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df))
 ```
 
-    ## Wald test
-    ## 
-    ## Model 1: KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + 
-    ##     Emelet + DeliTaj + Buda
-    ## Model 2: KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + 
-    ##     DeliTaj + Buda
-    ##   Res.Df Df      F Pr(>F)
-    ## 1   1397                 
-    ## 2   1398 -1 0.1697 0.6804
+    ##    Terulet     Terasz      Szoba   Felszoba Furdoszoba     Emelet    DeliTaj 
+    ##   3.682941   1.261302   3.552680   1.270590   1.633121   1.037153   1.038851 
+    ##       Buda 
+    ##   1.113975
+
+Így már lefut a VIF, azonban van a terület és a szobák számánál így is
+zavaró mutlikollinearitás van.
 
 ``` r
-szukitett_modell3 = lm(KinArMFt ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
+szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
 
-waldtest(szukitett_modell1,szukitett_modell3)
+IC = AIC(alapmodell, szukitett_modell1)
+IC$BIC = BIC(alapmodell, szukitett_modell1)$BIC
+
+kable(IC)
 ```
 
-    ## Wald test
-    ## 
-    ## Model 1: KinArMFt ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + 
-    ##     Emelet + DeliTaj + Buda
-    ## Model 2: KinArMFt ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + 
-    ##     Buda
-    ##   Res.Df Df      F Pr(>F)
-    ## 1   1397                 
-    ## 2   1398 -1 0.9014 0.3426
+|                   |  df |      AIC |      BIC |
+|:------------------|----:|---------:|---------:|
+| alapmodell        |  30 | 402.3455 | 559.8007 |
+| szukitett_modell1 |  10 | 655.7834 | 708.2685 |
+
+Mind az AIC, mind a BIC jobban preferálja, ha a kerületek szerepelnek a
+magyarázó változók között.
