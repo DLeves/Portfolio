@@ -1,11 +1,78 @@
 ---
-title: "Untitled"
+title: "Budapesti lakásárak elemzése"
 author: "Dittrich Levente"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  github_document:
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Ebben a portfolió fejezetben azt vizsgálom meg, hogy az [AMD](https://finance.yahoo.com/quote/AMD?p=AMD&.tsrc=fin-srch), [NVIDIA](https://finance.yahoo.com/quote/NVDA?p=NVDA&.tsrc=fin-srch) és [Intel](https://finance.yahoo.com/quote/INTC?p=INTC&.tsrc=fin-srch) vállalatok részvényeinak árfolyamára fogok VECM vagy VAR modellt illeszteni, attól függően, hogy van-e közös hosszútávú pályájuk.
+
+Mindhárom vállalat székhelye a kaliforniai Santa Claraban található, azonban nem csak az a közös bennük, hanem a tevékenységük is hasonló. Ezek a vállalatok mind mikro- és grafikus proceszorokkal foglalkoznak elsősorban. A napi gyakoriságú részvényadatokat a Yahoo Finance-ről töltöm le, viszont egy meghatározott intervallumban, így reprodukálhatóak lesznek eredményeim.
+
+# Kezdeti beállítások
+
+## Használt package-ek
+
+```{r warning=FALSE, message=FALSE}
+library(quantmod)
+library(tidyverse)
+library(knitr)
+```
+
+Egy részvénynek egy napra több értékei is lehet, például az adott napi maximum, minimum, a nyitó vagy záró értéke. A továbbiakban az egyes részvények záró értékeivel fogok dolgozni.
+
+## Adatok megszerzése
+
+```{r}
+intel = getSymbols("INTC", src = "yahoo", auto.assign = F, from = "2010-01-01", to = "2023-06-01")
+amd = getSymbols("AMD", src = "yahoo", auto.assign = F, from = "2010-01-01", to = "2023-06-01")
+nvidia = getSymbols("NVDA", src = "yahoo", auto.assign = F, from = "2010-01-01", to = "2023-06-01")
+```
+
+## Adatok átalakítása
+
+Érdemes az adatokat nem xts formátumban egyenként, hanem dataframe-ként egyben tárolni, hogy később könnyebb legyen a munka.
+
+```{r}
+df = data.frame(
+  time = index(intel),
+  intc = as.numeric(intel$INTC.Close),
+  amd = as.numeric(amd$AMD.Close),
+  nvda = as.numeric(nvidia$NVDA.Close)
+)
+rm(intel, amd, nvidia)
+kable(head(df))
+```
+
+Az adatokat tartalmazó dataframe változói a következők:
+
+| Változó neve | Leírás                                    | Mértékegység |
+|:-------------|:------------------------------------------|:-------------|
+| time         | Idő(az adott nap)                         | Dátum        |
+| intc         | Az adott napi Intel részvény záró értéke  | \$           |
+| amd          | Az adott napi AMD részvény záró értéke    | \$           |
+| nvda         | Az adott napi NVIDIA részvény záró értéke | \$           |
+
+# Adatvizualizáció
+
+```{r}
+ggplot(df, aes(x = time))+
+  geom_line(aes(y = intc, col = "Intel"))+
+  geom_line(aes(y = amd, col = "AMD"))+
+  geom_line(aes(y = nvda, col = "NVIDIA"))+
+  scale_y_continuous(labels = scales::dollar_format())+
+  scale_color_manual(values = c("#ED1C24", "#0071C5", "#76B900"))+
+  theme_minimal()+
+  theme(legend.title = element_blank())+
+  labs(x = "Idő", y = "Részvény árfolyam")
+```
+
+```{r}
+
+```
