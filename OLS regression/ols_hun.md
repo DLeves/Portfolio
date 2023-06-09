@@ -18,6 +18,17 @@ Dittrich Levente
 - <a href="#modellépítés" id="toc-modellépítés">Modellépítés</a>
   - <a href="#alapmodell" id="toc-alapmodell">Alapmodell</a>
   - <a href="#modellszelekció" id="toc-modellszelekció">Modellszelekció</a>
+    - <a href="#multikollinearitás"
+      id="toc-multikollinearitás">Multikollinearitás</a>
+    - <a href="#mediációs-kitekintés" id="toc-mediációs-kitekintés">Mediációs
+      kitekintés</a>
+    - <a href="#változók-szelekciója" id="toc-változók-szelekciója">Változók
+      szelekciója</a>
+    - <a href="#heteroszkedaszticitás"
+      id="toc-heteroszkedaszticitás">Heteroszkedaszticitás</a>
+  - <a href="#végső-modell" id="toc-végső-modell">Végső modell</a>
+- <a href="#kitekintés-végszó" id="toc-kitekintés-végszó">Kitekintés,
+  végszó</a>
 
 Ebben a portfolió fejezetben OLS regresszióval fogom megbecsülni a
 budapesti lakások árát.
@@ -41,6 +52,7 @@ library(corrplot)
 library(ppcor)
 library(car)
 library(skedastic)
+library(lmtest)
 ```
 
 ## Adatok beolvasása
@@ -347,6 +359,8 @@ alapján fogom eldönteni, hogy jobb-e ha kiveszem őket belőle.
 
 ## Modellszelekció
 
+### Multikollinearitás
+
 Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben.
 A VIF mutató azt mutatja meg, hogy hányszorosára nőtt a standard
 hibájának négyzete az egyes változók esetében.
@@ -375,6 +389,8 @@ vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet
 zavaró multikollinearitás van. Mivel nem káros még a multikollinearitás
 ezért nem feltétlenül szükséges kezelni, azonban könnyen feltűnhet, hogy
 az alapterülettel lehetne magyarázni a szobák számát.
+
+### Mediációs kitekintés
 
 Ekkor az alapterületnek van direkt, indirekt és teljes hatása. Legyen a
 kínálati ár = $\hat{Y}$, az alapterület = $X_{t}$, a szobák száma =
@@ -423,6 +439,8 @@ alapterület hatása a szobára azonban *0,02* volt, amit ha mgszorzunk a
 szobák számának hatásával, akkor megkapjuk a terület közvetett hatását,
 ami \~ *0,02*. A teljes hatása az alapterületnek a közvetlen és a
 közvetett hatások összege, vagyis *0,4*.
+
+### Változók szelekciója
 
 Visszatérve a modellszelekcióhoz, a félszobák és a fürdőszobák száma
 szintén nem szignifikáns. Ezeken a változókon két Wald-tesztet fogok
@@ -515,9 +533,17 @@ csökkent. Lehet érdemes lenne megpróbálni a kerületeket nagyobb
 csoportokba sorolni és úgy visszatenni a modellbe, ám ehhez nincsen elég
 mély budapesti ingatlan-ismeretem.
 
-A standard modellfeltételek közé tartozik a homoszkedaszticitás. Ennek
-ellenőrzésér White tesztet fogok végezni a fentebb létrehozott modellen.
-A White teszt
+### Heteroszkedaszticitás
+
+A standard modellfeltételek közé tartozik a homoszkedaszticitás.
+Ilyenkor a hibatagok négyzeteinek szórása homogén. Ennek ellenőrzésér
+White tesztet fogok végezni a fentebb létrehozott modellen. A White
+teszt hipotézisei a következők:
+
+- H0: a modell homoszkedaszticikus, a hibatagok négyzetét nem magyarázza
+  semmi jól
+- H1: a modell heteroszkedaszticikus, a hibatagok négyzetét jól
+  magyarázzák a magyarázó változók és/vagy azok négyzetei
 
 ``` r
 white(szukitett_modell4, interactions = T)
@@ -528,14 +554,125 @@ white(szukitett_modell4, interactions = T)
     ##       <dbl>     <dbl>     <dbl> <chr>        <chr>      
     ## 1     1012. 8.50e-196        27 White's Test greater
 
+H0-t 1%-os szignifikanciaszinten is elutasíthatjuk, van
+heteroszkedaszticitás. A hibatagok négyzetét ábrázolva az
+eredményváltozó függvényében a következőt látjuk:
+
 ``` r
 plotdf = data.frame(
   y = szukitett_modell4$model$`log(KinArMFt)`,
-  res = szukitett_modell4$residuals
+  res = szukitett_modell4$residuals^2
 )
 
 ggplot(plotdf,aes(y,res))+
-  geom_point()
+  geom_point()+
+  theme_minimal()+
+  labs(y = "Hibatagok négyzete", x = "Log(lakásár)")
 ```
 
 ![](ols_hun_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+Látszik, hogy a nagyon alacsony és nagyon magas értékek eltérnek a
+többitől, a hibatagok szórása nem homogén. Ebből az következik, hogy
+torzultak és inkonzisztensek lesznek a becsült standard hibák. Ebből az
+is következik, hogy a próbafüggvényeknek nem lesz t- vagy F-eloszlása,
+vagyis a parciális tesztek és a paraméterekre adott
+konfidencia-intervallumok érvényüket vesztik.
+
+A heteroszkedaszticitás kezelésére elegendő lehet a White-féle HCCME
+módon korrigált standard hibákkal megnézni a koefficienseket:
+
+``` r
+coeftest(szukitett_modell4, vcov. = hccm(szukitett_modell4))
+```
+
+    ## 
+    ## t test of coefficients:
+    ## 
+    ##              Estimate Std. Error t value  Pr(>|t|)    
+    ## (Intercept) 1.9911968  0.0451850 44.0677 < 2.2e-16 ***
+    ## Terulet     0.0077428  0.0009640  8.0320 2.018e-15 ***
+    ## Terasz      0.0059721  0.0019968  2.9909 0.0028304 ** 
+    ## Szoba       0.1029205  0.0216550  4.7527 2.214e-06 ***
+    ## Emelet      0.0191358  0.0050929  3.7573 0.0001788 ***
+    ## DeliTaj1    0.0567976  0.0159725  3.5560 0.0003891 ***
+    ## Buda1       0.2792914  0.0174005 16.0507 < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+A Terasz nevű változó a korrigált módon 0,1% helyett ‘csak’ 1%-on
+szignifikáns, a többi változó válotzatlanul 0,1% alatt is. Mivel eddig
+torzított volt a becslésem, ezért megnézem megint, hogy szignifikánsak-e
+így a fürdőszoba és a félszoba változók.
+
+``` r
+coeftest(szukitett_modell1, vcov. = hccm(szukitett_modell1))
+```
+
+    ## 
+    ## t test of coefficients:
+    ## 
+    ##                Estimate  Std. Error t value  Pr(>|t|)    
+    ## (Intercept)  2.00921241  0.05888861 34.1189 < 2.2e-16 ***
+    ## Terulet      0.00784336  0.00095109  8.2467 3.717e-16 ***
+    ## Terasz       0.00610030  0.00203718  2.9945 0.0027975 ** 
+    ## Szoba        0.10524038  0.02631020  4.0000 6.666e-05 ***
+    ## Felszoba    -0.00246229  0.01765092 -0.1395 0.8890760    
+    ## Furdoszoba  -0.02822510  0.03834487 -0.7361 0.4618023    
+    ## Emelet       0.01923705  0.00511335  3.7621 0.0001754 ***
+    ## DeliTaj1     0.05668467  0.01600589  3.5415 0.0004110 ***
+    ## Buda1        0.27954814  0.01769619 15.7971 < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+## Végső modell
+
+A korrigált koefficiensek sem szignifikánsak, így az anélkülieket
+tekintem a végső modellemnek. A végső modell korrigált együtthatói a
+következők:
+
+``` r
+coeftest(szukitett_modell4, vcov. = hccm(szukitett_modell4))
+```
+
+    ## 
+    ## t test of coefficients:
+    ## 
+    ##              Estimate Std. Error t value  Pr(>|t|)    
+    ## (Intercept) 1.9911968  0.0451850 44.0677 < 2.2e-16 ***
+    ## Terulet     0.0077428  0.0009640  8.0320 2.018e-15 ***
+    ## Terasz      0.0059721  0.0019968  2.9909 0.0028304 ** 
+    ## Szoba       0.1029205  0.0216550  4.7527 2.214e-06 ***
+    ## Emelet      0.0191358  0.0050929  3.7573 0.0001788 ***
+    ## DeliTaj1    0.0567976  0.0159725  3.5560 0.0003891 ***
+    ## Buda1       0.2792914  0.0174005 16.0507 < 2.2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+A koefficiensek értelmezése a következő:
+
+- $\beta_{0}$: Ez a függvény tengelymetszete, amennyiben minden
+  magyarázó változó értéke nulla, akkor $e^{1.991} \sim 7,32$ millió
+  Forint lesz egy lakás ára
+- $\beta_{1}$: ceteris paribus egy négyzetméternyi alapterület növekedés
+  0,774%-kal növeli az árat
+- $\beta_{2}$: c.p. egy négyzetméternyi terasz terület növekedés
+  0,597%-kal növeli az árat
+- $\beta_{3}$: c.p. ha egy szobával több van a lakásban, akkor az
+  10%-kal növeli az árat
+- $\beta_{4}$: c.p. ha a lakás egy emelettel magasabban van a lakás,
+  akkor az ár 1,914%-kal nő az ár
+- $\beta_{5}$: c.p. amennyiben déli tájolású egy lakás, akkor az az árat
+  5,68%-kal nő az ár, ahhoz képest, mintha nem déli tájolású lenne.
+- $\beta_{6}$: c.p. ha egy lakás Budán helyezkedik el, akkor 27,93%-kal
+  magasabb lesz a lakás ára, mintha Pesten lenne
+
+# Kitekintés, végszó
+
+Egy olyan modell jött ki végül, aminek minden együtthatója legalább
+1%-on szignifikáns, azonban bizonyosan vannak kihagyott változók. A
+multikollinearitás miatt eltávolított kerületek sokat számíthatanak egy
+lakás áránál. Az adattáblában a lakások állapota sem volt feltüntetve,
+ami szintén fontos szempont lehet. Több szempontból lehetne bővíteni a
+modellt a továbbiakban, valamint az esetleg figyelembe venni több évet
+is panel modellel.

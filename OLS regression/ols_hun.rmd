@@ -27,6 +27,7 @@ library(corrplot)
 library(ppcor)
 library(car)
 library(skedastic)
+library(lmtest)
 ```
 
 ## Adatok beolvasása
@@ -191,6 +192,7 @@ A kerületeknél a dummy kódolás miatt az első kerületet vette alapul és a 
 
 ## Modellszelekció
 
+### Multikollinearitás
 Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben. A VIF mutató azt mutatja meg, hogy hányszorosára nőtt a standard hibájának négyzete az egyes változók esetében.
 
 ```{r warning=TRUE, error=TRUE}
@@ -204,12 +206,16 @@ vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet
 ```
 Így már lefut a VIF, azonban van a terület és a szobák számánál így is zavaró multikollinearitás van. Mivel nem káros még a multikollinearitás ezért nem feltétlenül szükséges kezelni, azonban könnyen feltűnhet, hogy az alapterülettel lehetne magyarázni a szobák számát.
 
+### Mediációs kitekintés
+
 Ekkor az alapterületnek van direkt, indirekt és teljes hatása. Legyen a kínálati ár = $\hat{Y}$, az alapterület = $X_{t}$, a szobák száma = $X_{sz}$. A direkt hatás egyszerűen $\beta_{t}$ az $\hat{Y} = \beta_{0} + \beta_{t} \times X_{t} + \beta_{sz} \times X_{sz}$. Az indirekt hatás az a $\beta_{t->sz}$, ami az $X_{sz} \sim \beta_{0} + \beta_{t->sz} \times X_{t}$ egyenletből jön. A teljes hatás pedig ezeknek az összege. 
 
 ```{r}
 summary(mediate(KinArMFt ~ Terulet + (Szoba), data = df))
 ```
 Az alapterület közvetlen hatása *0,38*, a szobáé *1,09* volt az árra. Az alapterület hatása a szobára azonban *0,02* volt, amit ha mgszorzunk a szobák számának hatásával, akkor megkapjuk a terület közvetett hatását, ami ~ *0,02*. A teljes hatása az alapterületnek a közvetlen és a közvetett hatások összege, vagyis *0,4*.
+
+### Változók szelekciója
 
 Visszatérve a modellszelekcióhoz, a félszobák és a fürdőszobák száma szintén nem szignifikáns. Ezeken a változókon két Wald-tesztet fogok elvégezni. A Wald-teszt egy olyan speciális F-próba, amivel meg tudjuk nézni, hogy az elhagyott változók bétája a mintán kívül nulla. A teszt hipotézisei a következők:
 
@@ -243,19 +249,61 @@ summary(szukitett_modell4)
 
 Minden változó szignifikáns, azonban a kiigazított R^2^ csökkent. Lehet érdemes lenne megpróbálni a kerületeket nagyobb csoportokba sorolni és úgy visszatenni a modellbe, ám ehhez nincsen elég mély budapesti ingatlan-ismeretem.
 
-A standard modellfeltételek közé tartozik a homoszkedaszticitás. Ennek ellenőrzésér White tesztet fogok végezni a fentebb létrehozott modellen. A White teszt 
+### Heteroszkedaszticitás
+
+A standard modellfeltételek közé tartozik a homoszkedaszticitás. Ilyenkor a hibatagok négyzeteinek szórása homogén. Ennek ellenőrzésér White tesztet fogok végezni a fentebb létrehozott modellen. A White teszt hipotézisei a következők:
+
+-   H0: a modell homoszkedaszticikus, a hibatagok négyzetét nem magyarázza semmi jól
+-   H1: a modell heteroszkedaszticikus, a hibatagok négyzetét jól magyarázzák a magyarázó változók és/vagy azok négyzetei
 
 ```{r}
 white(szukitett_modell4, interactions = T)
 ```
+H0-t 1%-os szignifikanciaszinten is elutasíthatjuk, van heteroszkedaszticitás. A hibatagok négyzetét ábrázolva az eredményváltozó függvényében a következőt látjuk:
 
 ```{r}
 plotdf = data.frame(
   y = szukitett_modell4$model$`log(KinArMFt)`,
-  res = szukitett_modell4$residuals
+  res = szukitett_modell4$residuals^2
 )
 
 ggplot(plotdf,aes(y,res))+
-  geom_point()
+  geom_point()+
+  theme_minimal()+
+  labs(y = "Hibatagok négyzete", x = "Log(lakásár)")
 ```
 
+Látszik, hogy a nagyon alacsony és nagyon magas értékek eltérnek a többitől, a hibatagok szórása nem homogén. Ebből az következik, hogy torzultak és inkonzisztensek lesznek a becsült standard hibák. Ebből az is következik, hogy a próbafüggvényeknek nem lesz t- vagy F-eloszlása, vagyis a parciális tesztek és a paraméterekre adott konfidencia-intervallumok érvényüket vesztik.
+
+A heteroszkedaszticitás kezelésére elegendő lehet a White-féle HCCME módon korrigált standard hibákkal megnézni a koefficienseket:
+
+```{r}
+coeftest(szukitett_modell4, vcov. = hccm(szukitett_modell4))
+```
+
+A Terasz nevű változó a korrigált módon 0,1% helyett 'csak' 1%-on szignifikáns, a többi változó válotzatlanul 0,1% alatt is. Mivel eddig torzított volt a becslésem, ezért megnézem megint, hogy szignifikánsak-e így a fürdőszoba és a félszoba változók.
+
+```{r}
+coeftest(szukitett_modell1, vcov. = hccm(szukitett_modell1))
+```
+## Végső modell
+
+A korrigált koefficiensek sem szignifikánsak, így az anélkülieket tekintem a végső modellemnek. A végső modell korrigált együtthatói a következők:
+
+```{r}
+coeftest(szukitett_modell4, vcov. = hccm(szukitett_modell4))
+```
+
+A koefficiensek értelmezése a következő:
+
+-   $\beta_{0}$: Ez a függvény tengelymetszete, amennyiben minden magyarázó változó értéke nulla, akkor $e^{1.991} \sim 7,32$ millió Forint lesz egy lakás ára
+-   $\beta_{1}$: ceteris paribus egy négyzetméternyi alapterület növekedés 0,774%-kal növeli az árat
+-   $\beta_{2}$: c.p. egy négyzetméternyi terasz terület növekedés 0,597%-kal növeli az árat
+-   $\beta_{3}$: c.p. ha egy szobával több van a lakásban, akkor az 10%-kal növeli az árat
+-   $\beta_{4}$: c.p. ha a lakás egy emelettel magasabban van a lakás, akkor az ár 1,914%-kal nő az ár
+-   $\beta_{5}$: c.p. amennyiben déli tájolású egy lakás, akkor az az árat 5,68%-kal nő az ár, ahhoz képest, mintha nem déli tájolású lenne.
+-   $\beta_{6}$: c.p. ha egy lakás Budán helyezkedik el, akkor 27,93%-kal magasabb lesz a lakás ára, mintha Pesten lenne
+
+# Kitekintés, végszó
+
+Egy olyan modell jött ki végül, aminek minden együtthatója legalább 1%-on szignifikáns, azonban bizonyosan vannak kihagyott változók. A multikollinearitás miatt eltávolított kerületek sokat számíthatanak egy lakás áránál. Az adattáblában a lakások állapota sem volt feltüntetve, ami szintén fontos szempont lehet. Több szempontból lehetne bővíteni a modellt a továbbiakban, valamint az esetleg figyelembe venni több évet is panel modellel. 
