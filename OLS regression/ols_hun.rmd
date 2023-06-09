@@ -26,7 +26,7 @@ library(psych)
 library(corrplot)
 library(ppcor)
 library(car)
-library(lmtest)
+library(skedastic)
 ```
 
 ## Adatok beolvasása
@@ -191,33 +191,71 @@ A kerületeknél a dummy kódolás miatt az első kerületet vette alapul és a 
 
 ## Modellszelekció
 
-Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben.
+Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben. A VIF mutató azt mutatja meg, hogy hányszorosára nőtt a standard hibájának négyzete az egyes változók esetében.
 
 ```{r warning=TRUE, error=TRUE}
 vif(alapmodell)
 ```
 
-Nem fut le a VIF függvény, mégpedig azért, mert tökéletes multikollineraitás van a modellben. Ez megmagyarázza a 22. kerület NA értékét is.
-Megpróbálom a kerületek nélkül is megnézni a VIF mutatót.
-
+Nem fut le a VIF függvény, mégpedig azért, mert egzakt multikollineraitás van a modellben. Ez megmagyarázza a 22. kerület NA értékét is. Kénytelen vagyok a továbbiakban elhagyni a kerületeket a modellből. A kerületek nélküli VIF mutatók a következők:
 
 ```{r}
 vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df))
 ```
-Így már lefut a VIF, azonban van a terület és a szobák számánál így is zavaró mutlikollinearitás van.
+Így már lefut a VIF, azonban van a terület és a szobák számánál így is zavaró multikollinearitás van. Mivel nem káros még a multikollinearitás ezért nem feltétlenül szükséges kezelni, azonban könnyen feltűnhet, hogy az alapterülettel lehetne magyarázni a szobák számát.
+
+Ekkor az alapterületnek van direkt, indirekt és teljes hatása. Legyen a kínálati ár = $\hat{Y}$, az alapterület = $X_{t}$, a szobák száma = $X_{sz}$. A direkt hatás egyszerűen $\beta_{t}$ az $\hat{Y} = \beta_{0} + \beta_{t} \times X_{t} + \beta_{sz} \times X_{sz}$. Az indirekt hatás az a $\beta_{t->sz}$, ami az $X_{sz} \sim \beta_{0} + \beta_{t->sz} \times X_{t}$ egyenletből jön. A teljes hatás pedig ezeknek az összege. 
 
 ```{r}
-szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
-
-IC = AIC(alapmodell, szukitett_modell1)
-IC$BIC = BIC(alapmodell, szukitett_modell1)$BIC
-
-kable(IC)
+summary(mediate(KinArMFt ~ Terulet + (Szoba), data = df))
 ```
+Az alapterület közvetlen hatása *0,38*, a szobáé *1,09* volt az árra. Az alapterület hatása a szobára azonban *0,02* volt, amit ha mgszorzunk a szobák számának hatásával, akkor megkapjuk a terület közvetett hatását, ami ~ *0,02*. A teljes hatása az alapterületnek a közvetlen és a közvetett hatások összege, vagyis *0,4*.
 
-Mind az AIC, mind a BIC jobban preferálja, ha a kerületek szerepelnek a magyarázó változók között. 
+Visszatérve a modellszelekcióhoz, a félszobák és a fürdőszobák száma szintén nem szignifikáns. Ezeken a változókon két Wald-tesztet fogok elvégezni. A Wald-teszt egy olyan speciális F-próba, amivel meg tudjuk nézni, hogy az elhagyott változók bétája a mintán kívül nulla. A teszt hipotézisei a következők:
 
+-   H0: Az elhagyott változónak nincsen magyarázó ereje, a mintán kívül nulla az együtthatója
+-   H1: Az elhagyott változónak van magyarázó ereje, a mintán kívül nem nulla az együtthatója
+
+Először a fürdőszobát hagytam el:
 
 ```{r}
-
+szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda, df)
+szukitett_modell2 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Emelet + DeliTaj + Buda, df)
+anova(szukitett_modell1, szukitett_modell2)
 ```
+H0-t minden szokványos szignifikancia szint mellett sem lehet elutasítani, tehát H0-t elfogadom. A fürdőszobának nincsen magyarázó ereje, együtthatója a mintán kívül nulla.
+
+A félszobát elhagyva:
+
+```{r}
+szukitett_modell3 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + Buda, df)
+anova(szukitett_modell1, szukitett_modell3)
+```
+
+H0-t minden szokványos szignifikancia szint mellett sem lehet elutasítani, tehát H0-t elfogadom. A fürdőszobának nincsen magyarázó ereje, együtthatója a mintán kívül nulla.
+
+A két változót elhagyhatom a modellből, így a következő modellt kapom:
+
+```{r}
+szukitett_modell4 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Emelet + DeliTaj + Buda, df)
+summary(szukitett_modell4)
+```
+
+Minden változó szignifikáns, azonban a kiigazított R^2^ csökkent. Lehet érdemes lenne megpróbálni a kerületeket nagyobb csoportokba sorolni és úgy visszatenni a modellbe, ám ehhez nincsen elég mély budapesti ingatlan-ismeretem.
+
+A standard modellfeltételek közé tartozik a homoszkedaszticitás. Ennek ellenőrzésér White tesztet fogok végezni a fentebb létrehozott modellen. A White teszt 
+
+```{r}
+white(szukitett_modell4, interactions = T)
+```
+
+```{r}
+plotdf = data.frame(
+  y = szukitett_modell4$model$`log(KinArMFt)`,
+  res = szukitett_modell4$residuals
+)
+
+ggplot(plotdf,aes(y,res))+
+  geom_point()
+```
+

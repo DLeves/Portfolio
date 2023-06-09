@@ -1,7 +1,7 @@
 Budapesti lakásárak elemzése
 ================
 Dittrich Levente
-2023-06-08
+2023-06-09
 
 - <a href="#kezdeti-beállítások" id="toc-kezdeti-beállítások">Kezdeti
   beállítások</a>
@@ -40,7 +40,7 @@ library(psych)
 library(corrplot)
 library(ppcor)
 library(car)
-library(lmtest)
+library(skedastic)
 ```
 
 ## Adatok beolvasása
@@ -348,6 +348,8 @@ alapján fogom eldönteni, hogy jobb-e ha kiveszem őket belőle.
 ## Modellszelekció
 
 Mindenek előtt megvizsgálom, hogy van-e multikollinearitás a modellben.
+A VIF mutató azt mutatja meg, hogy hányszorosára nőtt a standard
+hibájának négyzete az egyes változók esetében.
 
 ``` r
 vif(alapmodell)
@@ -355,9 +357,10 @@ vif(alapmodell)
 
     ## Error in vif.default(alapmodell): there are aliased coefficients in the model
 
-Nem fut le a VIF függvény, mégpedig azért, mert tökéletes
+Nem fut le a VIF függvény, mégpedig azért, mert egzakt
 multikollineraitás van a modellben. Ez megmagyarázza a 22. kerület NA
-értékét is. Megpróbálom a kerületek nélkül is megnézni a VIF mutatót.
+értékét is. Kénytelen vagyok a továbbiakban elhagyni a kerületeket a
+modellből. A kerületek nélküli VIF mutatók a következők:
 
 ``` r
 vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df))
@@ -369,21 +372,170 @@ vif(lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet
     ##   1.113975
 
 Így már lefut a VIF, azonban van a terület és a szobák számánál így is
-zavaró mutlikollinearitás van.
+zavaró multikollinearitás van. Mivel nem káros még a multikollinearitás
+ezért nem feltétlenül szükséges kezelni, azonban könnyen feltűnhet, hogy
+az alapterülettel lehetne magyarázni a szobák számát.
+
+Ekkor az alapterületnek van direkt, indirekt és teljes hatása. Legyen a
+kínálati ár = $\hat{Y}$, az alapterület = $X_{t}$, a szobák száma =
+$X_{sz}$. A direkt hatás egyszerűen $\beta_{t}$ az
+$\hat{Y} = \beta_{0} + \beta_{t} \times X_{t} + \beta_{sz} \times X_{sz}$.
+Az indirekt hatás az a $\beta_{t->sz}$, ami az
+$X_{sz} \sim \beta_{0} + \beta_{t->sz} \times X_{t}$ egyenletből jön. A
+teljes hatás pedig ezeknek az összege.
 
 ``` r
-szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda,df)
-
-IC = AIC(alapmodell, szukitett_modell1)
-IC$BIC = BIC(alapmodell, szukitett_modell1)$BIC
-
-kable(IC)
+summary(mediate(KinArMFt ~ Terulet + (Szoba), data = df))
 ```
 
-|                   |  df |      AIC |      BIC |
-|:------------------|----:|---------:|---------:|
-| alapmodell        |  30 | 402.3455 | 559.8007 |
-| szukitett_modell1 |  10 | 655.7834 | 708.2685 |
+![](ols_hun_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
-Mind az AIC, mind a BIC jobban preferálja, ha a kerületek szerepelnek a
-magyarázó változók között.
+    ## Call: mediate(y = KinArMFt ~ Terulet + (Szoba), data = df)
+    ## 
+    ## Direct effect estimates (traditional regression)    (c') X + M on Y 
+    ##           KinArMFt   se     t   df      Prob
+    ## Intercept    -5.21 0.63 -8.25 1403  3.63e-16
+    ## Terulet       0.38 0.01 35.63 1403 1.42e-198
+    ## Szoba         1.09 0.37  2.99 1403  2.88e-03
+    ## 
+    ## R = 0.86 R2 = 0.74   F = 2004.81 on 2 and 1403 DF   p-value:  0 
+    ## 
+    ##  Total effect estimates (c) (X on Y) 
+    ##           KinArMFt   se     t   df     Prob
+    ## Intercept    -4.31 0.56 -7.74 1404 1.85e-14
+    ## Terulet       0.40 0.01 63.07 1404 0.00e+00
+    ## 
+    ##  'a'  effect estimates (X on M) 
+    ##           Szoba   se     t   df      Prob
+    ## Intercept  0.82 0.04 20.30 1404  1.47e-80
+    ## Terulet    0.02 0.00 49.82 1404 1.07e-312
+    ## 
+    ##  'b'  effect estimates (M on Y controlling for X) 
+    ##       KinArMFt   se    t   df    Prob
+    ## Szoba     1.09 0.37 2.99 1403 0.00288
+    ## 
+    ##  'ab'  effect estimates (through all  mediators)
+    ##         KinArMFt boot   sd lower upper
+    ## Terulet     0.03 0.02 0.01     0  0.05
+
+Az alapterület közvetlen hatása *0,38*, a szobáé *1,09* volt az árra. Az
+alapterület hatása a szobára azonban *0,02* volt, amit ha mgszorzunk a
+szobák számának hatásával, akkor megkapjuk a terület közvetett hatását,
+ami \~ *0,02*. A teljes hatása az alapterületnek a közvetlen és a
+közvetett hatások összege, vagyis *0,4*.
+
+Visszatérve a modellszelekcióhoz, a félszobák és a fürdőszobák száma
+szintén nem szignifikáns. Ezeken a változókon két Wald-tesztet fogok
+elvégezni. A Wald-teszt egy olyan speciális F-próba, amivel meg tudjuk
+nézni, hogy az elhagyott változók bétája a mintán kívül nulla. A teszt
+hipotézisei a következők:
+
+- H0: Az elhagyott változónak nincsen magyarázó ereje, a mintán kívül
+  nulla az együtthatója
+- H1: Az elhagyott változónak van magyarázó ereje, a mintán kívül nem
+  nulla az együtthatója
+
+Először a fürdőszobát hagytam el:
+
+``` r
+szukitett_modell1 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + Emelet + DeliTaj + Buda, df)
+szukitett_modell2 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Emelet + DeliTaj + Buda, df)
+anova(szukitett_modell1, szukitett_modell2)
+```
+
+    ## Analysis of Variance Table
+    ## 
+    ## Model 1: log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + 
+    ##     Emelet + DeliTaj + Buda
+    ## Model 2: log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Emelet + 
+    ##     DeliTaj + Buda
+    ##   Res.Df    RSS Df Sum of Sq      F Pr(>F)
+    ## 1   1397 129.39                           
+    ## 2   1398 129.51 -1   -0.1212 1.3086 0.2528
+
+H0-t minden szokványos szignifikancia szint mellett sem lehet
+elutasítani, tehát H0-t elfogadom. A fürdőszobának nincsen magyarázó
+ereje, együtthatója a mintán kívül nulla.
+
+A félszobát elhagyva:
+
+``` r
+szukitett_modell3 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + DeliTaj + Buda, df)
+anova(szukitett_modell1, szukitett_modell3)
+```
+
+    ## Analysis of Variance Table
+    ## 
+    ## Model 1: log(KinArMFt) ~ Terulet + Terasz + Szoba + Felszoba + Furdoszoba + 
+    ##     Emelet + DeliTaj + Buda
+    ## Model 2: log(KinArMFt) ~ Terulet + Terasz + Szoba + Furdoszoba + Emelet + 
+    ##     DeliTaj + Buda
+    ##   Res.Df    RSS Df Sum of Sq      F Pr(>F)
+    ## 1   1397 129.39                           
+    ## 2   1398 129.39 -1 -0.002605 0.0281 0.8668
+
+H0-t minden szokványos szignifikancia szint mellett sem lehet
+elutasítani, tehát H0-t elfogadom. A fürdőszobának nincsen magyarázó
+ereje, együtthatója a mintán kívül nulla.
+
+A két változót elhagyhatom a modellből, így a következő modellt kapom:
+
+``` r
+szukitett_modell4 = lm(log(KinArMFt) ~ Terulet + Terasz + Szoba + Emelet + DeliTaj + Buda, df)
+summary(szukitett_modell4)
+```
+
+    ## 
+    ## Call:
+    ## lm(formula = log(KinArMFt) ~ Terulet + Terasz + Szoba + Emelet + 
+    ##     DeliTaj + Buda, data = df)
+    ## 
+    ## Residuals:
+    ##      Min       1Q   Median       3Q      Max 
+    ## -2.43393 -0.19249 -0.01349  0.18793  1.11647 
+    ## 
+    ## Coefficients:
+    ##              Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept) 1.9911968  0.0233815  85.161  < 2e-16 ***
+    ## Terulet     0.0077428  0.0003347  23.135  < 2e-16 ***
+    ## Terasz      0.0059721  0.0007395   8.076 1.44e-15 ***
+    ## Szoba       0.1029205  0.0111958   9.193  < 2e-16 ***
+    ## Emelet      0.0191358  0.0047807   4.003 6.59e-05 ***
+    ## DeliTaj1    0.0567976  0.0165539   3.431 0.000619 ***
+    ## Buda1       0.2792914  0.0170371  16.393  < 2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 0.3043 on 1399 degrees of freedom
+    ## Multiple R-squared:  0.7481, Adjusted R-squared:  0.747 
+    ## F-statistic: 692.4 on 6 and 1399 DF,  p-value: < 2.2e-16
+
+Minden változó szignifikáns, azonban a kiigazított R<sup>2</sup>
+csökkent. Lehet érdemes lenne megpróbálni a kerületeket nagyobb
+csoportokba sorolni és úgy visszatenni a modellbe, ám ehhez nincsen elég
+mély budapesti ingatlan-ismeretem.
+
+A standard modellfeltételek közé tartozik a homoszkedaszticitás. Ennek
+ellenőrzésér White tesztet fogok végezni a fentebb létrehozott modellen.
+A White teszt
+
+``` r
+white(szukitett_modell4, interactions = T)
+```
+
+    ## # A tibble: 1 × 5
+    ##   statistic   p.value parameter method       alternative
+    ##       <dbl>     <dbl>     <dbl> <chr>        <chr>      
+    ## 1     1012. 8.50e-196        27 White's Test greater
+
+``` r
+plotdf = data.frame(
+  y = szukitett_modell4$model$`log(KinArMFt)`,
+  res = szukitett_modell4$residuals
+)
+
+ggplot(plotdf,aes(y,res))+
+  geom_point()
+```
+
+![](ols_hun_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
