@@ -23,6 +23,11 @@ Mindhárom vállalat székhelye a kaliforniai Santa Claraban található, azonba
 library(quantmod)
 library(tidyverse)
 library(knitr)
+library(urca)
+library(lmtest)
+library(aTSA)
+library(vars)
+library(tsDyn)
 ```
 
 Egy részvénynek egy napra több értékei is lehet, például az adott napi maximum, minimum, a nyitó vagy záró értéke. A továbbiakban az egyes részvények záró értékeivel fogok dolgozni.
@@ -75,8 +80,76 @@ ggplot(df, aes(x = time))+
   labs(x = "Idő", y = "Részvény árfolyam")
 ```
 
-Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok. Először azonban meg kell állapítanom, hogy van-e közös hosszútávú pályájuk.
+Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok.
+
+# Kointegréció tesztelése
+
+Ahhoz, hogy tudja, hogy VECM vagy VAR modellt kell használjak, meg kell állapítanom, hogy van-e közös hosszútávú pályájuk az idősoroknak. Kointegráció esetén VECM modell a megfelelő, míg ha nincs közös távú hosszútávú pályája az idósoroknak, akkor VAR modellt kell alkalmazzak.
+
+Erre egy *Johansen-tesztet* fogok végezni. A teszt érdekessége, hogy több nullhipotézist is felvet. Ez esetben a nullhipotézisek a következők, melyekben *r* a közös hosszútávú pályák száma:
+
+-   H0: $r = 0$     \| H1: $r > 0$
+-   H0: $r \le 1$   \| H1: $r > 1$
+-   H0: $r \le 2$   \| H1: $r > 2$
+
+Mivel összesen 3 db idősorom van, ezért maximum 2 db közös hosszútávú pálya lehetséges (a kódban ez a *K* paraméter).
 
 ```{r}
-
+johansen_test = ca.jo(df[,-1], type = "eigen",  K = 2, ecdet = "const", spec = "longrun")
+summary(johansen_test)
 ```
+
+A teszt egy jobboldali próba, ez azt jelenti, hogy akkor tudjuk elfogadni a nullhipotéziseket, ha az adott próbafüggvény kisebb vagy egyenlő a kritikus értéknél.
+$H0: r = 0$ Minden szokványos szignifikanciaszinten elfogadható.
+$H0: r \le 1$ Minden szokványos szignifikanciaszinten elfogadható.
+$H0: r \le 2$ Minden szokványos szignifikanciaszinten elfogadható.
+
+Ilyen esetben én a kettő közös hosszútávú pályát venném kiindulópontnak, amennyiben nem lesz szignifikáns ECT2, akkor megfontolom az egy hosszútávú pályára váltást.
+
+# Optimális késleltetés megtalálása
+
+Meg kellene határozzam az optimális késleltetést a VECM modellhez. Ez több lépésben fog megtörténni, először az idősorok stacionaritását kell tesztelnem. Amennyiben van egységgyök az idősorban, akkor stacionerré kell alakítanom őket majd mintha VAR modellhez keresném, meg kell határozzam az optimális késleltetést az információs kritériumokat felhasználva. 
+
+## Stacionaritás
+
+Az erős stacionaritás azt jelenti, hogy az idősorok minden véges dimenziós eloszlása eltolásinvariás. Ez egy olyan erős követelmény, amit inkább a valószínűségszámításban használnak gyakran, azonban ökonometriában túl szigorú követelmény, ezért szokás gyenge stacionaritással dolgozni. Ez azt jelenti, hogy az idősor szórása és várható értéke időben állandó. A stacionaritás teszteléséhez egy Augmented Dickey-Fuller tesztet fogok végezni.
+
+Az ADF teszt hipotézisei:
+
+-   H0: Az idősor nem stacioner, $\phi = 0$ 
+-   H1: Az idősor stacionárius, $\phi \neq 0$
+
+```{r}
+adf.test(df$intc)
+adf.test(df$amd)
+adf.test(df$nvda)
+```
+
+```{r}
+adf.test(diff(df$intc))
+adf.test(diff(df$amd))
+adf.test(diff(df$nvda))
+```
+
+## Késleltetés meghatározása
+
+```{r}
+df$d_intc = c(NA, diff(df$intc))
+df$d_amd = c(NA, diff(df$amd))
+df$d_nvda = c(NA, diff(df$nvda))
+
+VARselect(df[-1,5:7], lag.max = 20)
+```
+
+# Modellépítés
+
+```{r}
+alapmodell = VECM(df[,2:4], lag = 11, r = 2)
+summary(alapmodell)
+```
+
+```{r}
+szukitett_modell = VECM(df[,2:4], lag = 11, r = 1)
+summary(szukitett_modell)
+```
+
