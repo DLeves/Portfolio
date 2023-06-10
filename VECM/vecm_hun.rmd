@@ -59,6 +59,8 @@ Az adatokat tartalmazó dataframe változói a következők:
 | amd          | Az adott napi AMD részvény záró értéke    | \$           |
 | nvda         | Az adott napi NVIDIA részvény záró értéke | \$           |
 
+3375 megfigyelés van mindhárom változóból, ez mindenképpen elegendő lesz a modellépítéshez.
+
 # Adatvizualizáció
 
 ```{r}
@@ -72,6 +74,8 @@ ggplot(df, aes(x = time))+
   theme(legend.title = element_blank())+
   labs(x = "Idő", y = "Részvény árfolyam")
 ```
+
+Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok. Először azonban meg kell állapítanom, hogy van-e közös hosszútávú pályájuk.
 
 ```{r}
 
