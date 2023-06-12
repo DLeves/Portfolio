@@ -88,9 +88,9 @@ Ahhoz, hogy tudja, hogy VECM vagy VAR modellt kell használjak, meg kell állap�
 
 Erre egy *Johansen-tesztet* fogok végezni. A teszt érdekessége, hogy több nullhipotézist is felvet. Ez esetben a nullhipotézisek a következők, melyekben *r* a közös hosszútávú pályák száma:
 
--   H0: $r = 0$     \| H1: $r > 0$
--   H0: $r \le 1$   \| H1: $r > 1$
--   H0: $r \le 2$   \| H1: $r > 2$
+-   H0: $r = 0$ \| H1: $r > 0$
+-   H0: $r \le 1$ \| H1: $r > 1$
+-   H0: $r \le 2$ \| H1: $r > 2$
 
 Mivel összesen 3 db idősorom van, ezért maximum 2 db közös hosszútávú pálya lehetséges (a kódban ez a *K* paraméter).
 
@@ -99,16 +99,13 @@ johansen_test = ca.jo(df[,-1], type = "eigen",  K = 2, ecdet = "const", spec = "
 summary(johansen_test)
 ```
 
-A teszt egy jobboldali próba, ez azt jelenti, hogy akkor tudjuk elfogadni a nullhipotéziseket, ha az adott próbafüggvény kisebb vagy egyenlő a kritikus értéknél.
-$H0: r = 0$ Minden szokványos szignifikanciaszinten elfogadható.
-$H0: r \le 1$ Minden szokványos szignifikanciaszinten elfogadható.
-$H0: r \le 2$ Minden szokványos szignifikanciaszinten elfogadható.
+A teszt egy jobboldali próba, ez azt jelenti, hogy akkor tudjuk elfogadni a nullhipotéziseket, ha az adott próbafüggvény kisebb vagy egyenlő a kritikus értéknél. $H0: r = 0$ Minden szokványos szignifikanciaszinten elfogadható. $H0: r \le 1$ Minden szokványos szignifikanciaszinten elfogadható. $H0: r \le 2$ Minden szokványos szignifikanciaszinten elfogadható.
 
 Ilyen esetben én a kettő közös hosszútávú pályát venném kiindulópontnak, amennyiben nem lesz szignifikáns ECT2, akkor megfontolom az egy hosszútávú pályára váltást.
 
 # Optimális késleltetés megtalálása
 
-Meg kellene határozzam az optimális késleltetést a VECM modellhez. Ez több lépésben fog megtörténni, először az idősorok stacionaritását kell tesztelnem. Amennyiben van egységgyök az idősorban, akkor stacionerré kell alakítanom őket majd mintha VAR modellhez keresném, meg kell határozzam az optimális késleltetést az információs kritériumokat felhasználva. 
+Meg kellene határozzam az optimális késleltetést a VECM modellhez. Ez több lépésben fog megtörténni, először az idősorok stacionaritását kell tesztelnem. Amennyiben van egységgyök az idősorban, akkor stacionerré kell alakítanom őket majd mintha VAR modellhez keresném, meg kell határozzam az optimális késleltetést az információs kritériumokat felhasználva.
 
 ## Stacionaritás
 
@@ -116,8 +113,10 @@ Az erős stacionaritás azt jelenti, hogy az idősorok minden véges dimenziós 
 
 Az ADF teszt hipotézisei:
 
--   H0: Az idősor nem stacioner, $\phi = 0$ 
+-   H0: Az idősor nem stacioner, $\phi = 0$
 -   H1: Az idősor stacionárius, $\phi \neq 0$
+
+A teszt nem csak egyféle módon végzi a tesztet, random-walkkal, valamint random walkkal és trenddel is megnézi a stacionaritást.
 
 ```{r}
 adf.test(df$intc)
@@ -125,31 +124,92 @@ adf.test(df$amd)
 adf.test(df$nvda)
 ```
 
+Egyik idősor esetében sem lehet elutasítani a nullhipotézist, minden idősorom stacionárius.
+
 ```{r}
 adf.test(diff(df$intc))
 adf.test(diff(df$amd))
 adf.test(diff(df$nvda))
 ```
 
+A differenciált idősorok már stacionerek, nincsen egységgyök a modellben. Minden esetben a p-értékek 1% alatt vannak, a nullhipotéziseket el lehet vetni.
+
 ## Késleltetés meghatározása
+
+A differenciált idősorokat a dataframe-be lementem és így nézem meg az optimális lag-okat.
 
 ```{r}
 df$d_intc = c(NA, diff(df$intc))
 df$d_amd = c(NA, diff(df$amd))
 df$d_nvda = c(NA, diff(df$nvda))
 
-VARselect(df[-1,5:7], lag.max = 20)
+VARselect(df[-1,5:7], lag.max = 30)
 ```
 
+Mind az AIC, mind az FPE nagyon nagy lag-okat javasol. Ezeknél az információs kritériumoknál szigorúbb Hannan-Quinn információs kritérium a 11-es késleltetést preferálja, míg az annál is szigorúbb Bayes-Schwartz értéke az 1-es késleltetésnél a legkisebb. Ebben az esetben a Hannan-Quinn infromációs kritérium szerint fogok dönteni, 11-es késleletés lesz az alapmodellemben a kettő darab hosszútávú közös pálya mellett.
+
 # Modellépítés
+
+## Alapmodell
 
 ```{r}
 alapmodell = VECM(df[,2:4], lag = 11, r = 2)
 summary(alapmodell)
 ```
 
+A közös hosszútávú pálya koefficiensei csak az AMD esetében szignifikánsak. Ezek jelentése a következő az AMD esetében:
+
+-   ECT1: amennyiben az AMD elmozdul az első közös hosszútávú pályától, akkor a következő időszakban 0,51%-al a távolodik még.
+-   ECT2: amennyiben az AMD elmozdul a második közös hosszútávú pályától, akkor az elmozdulás 0,63%-át hozza be a következő időszakban.
+
+Érdemes kiemelni a kontextus miatt, hogy az Intel a x86 CPU-k piacának nagy részét az [Intel dominálja](https://www.statista.com/statistics/735904/worldwide-x86-intel-amd-market-share/), míg a diszkrét GPU-k piacának nagy részét az [NVIDIA uralja](https://www.pcworld.com/article/1526632/intel-is-already-tied-with-amd-for-desktop-gpu-sales.html). A laptopokat is beleértve szintén az [Intel a legnagyobb szereplő](https://www.statista.com/statistics/754557/worldwide-gpu-shipments-market-share-by-vendor/) a GPU piacon. Azért érdemes külön választani a diszkrét és integrált GPU-k piacát, mivel a 2010-es évek végétől kezdődő kriptovaluta bányászatra elsősorban dedikált, asztali videókártyákat használnak, ami egy időben okozott is hiányt, mivel a bányászok rengeteg GPU-t vásároltak fel a piacról.
+
+Valószínűnek tartom, hogy a két hosszútávú közös pálya a CPU és GPU piacokat jelenti. Ha a szignifikanciaszinttől függetlenül nézzük a pályák koefficienseit, akkor látható, hogy az első pályától való eltérésnél az Intel közeledik, míg az AMD és az NVIDIA távolodik a következő időszakban. A második hosszútávú közös pályát nézve pont fordított a helyzet: az eltérés hatására az Intel távolodik, míg az AMD és az NVIDIA ledolgozza az eltérés egy részét. Feltevésem szerint az első hosszútávú pálya a processzorgyártók hosszútávú pályája, míg a második közös hosszútávú pálya a GPU gyártóké.
+
+Visszatérve az alapmodellre, nagyon érdekes, hogy az előző időszaki Intel árfolyam mindegyik részvényre negatív hatással van. Végig a 11 késleltetésig nagyrészt vannak szignifikáns együtthatók, egyedül a négyes késleltetésnél nincsen egyik egyenletben sem szingifikáns koefficiens.
+
+## Modellszűkítés
+
+A modellszelekció miatt megnéztem több, más paraméterű modellt, ezek közül kettőt emelnék ki:
+
+Az egyik modellben egy közös hosszútávú pálya van 11 késleltetéssel:
+
 ```{r}
-szukitett_modell = VECM(df[,2:4], lag = 11, r = 1)
-summary(szukitett_modell)
+szukitett_modell1 = VECM(df[,2:4], lag = 11, r = 1)
+summary(szukitett_modell1)
+```
+
+A másik modellben pedig megmaradt a kettő közös hosszútávú pálya, azonban a késleltetést a Bayes-Schwartz IC által preferált 1-es késleltetésre cseréltem.
+
+```{r}
+szukitett_modell2 = VECM(df[,2:4], lag = 1, r = 2)
+summary(szukitett_modell2)
+```
+
+A modellek információs kritériumai:
+
+| Modell      | ECT | Lag | AIC               | BIC        |
+|:------------|:----|:----|:------------------|:-----------|
+| Alap        | 2   | 11  | 6161.923 \*       | 6835.188   |
+| Szűkített 1 | 1   | 11  | 6167.099          | 6822.002   |
+| Szűkített 2 | 2   | 1   | 6467.342          | 6589.813 \*|
+|             |     |     | \* *Legkisebb IC* |            |
+
+Az AIC szerint az alapmodell a jobb, míg a BIC szerint az egy késleltetésű, ami érthető is, mivel akkor drasztikusan csökken a bevont változók száma. Mivel egyértelműen nem tudom eldönteni, hogy szűkítsem-e a modellt, ezért amellett döntök, hogy meghagyom az alapmodellt végleges modellnek, mert egészen a 11 lagig vannak szignifikáns magyarázó változók.
+
+# Granger okság
+
+
+
+# Impulzus-válaszfüggvények
+
+```{r}
+plot(irf(alapmodell, impulse = "intl", response = "amd", n.ahead = 11, ortho = T))
+```
+
+
+# Becslési variancia dekompozíció
+```{r}
+fevd(alapmodell, n.ahead = 11)
 ```
 

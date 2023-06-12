@@ -1,27 +1,24 @@
 Budapesti lakásárak elemzése
 ================
 Dittrich Levente
-2023-06-10
+2023-06-12
 
-- <a href="#kezdeti-beállítások" id="toc-kezdeti-beállítások">Kezdeti
-  beállítások</a>
-  - <a href="#használt-package-ek" id="toc-használt-package-ek">Használt
-    package-ek</a>
-  - <a href="#adatok-megszerzése" id="toc-adatok-megszerzése">Adatok
-    megszerzése</a>
-  - <a href="#adatok-átalakítása" id="toc-adatok-átalakítása">Adatok
-    átalakítása</a>
-- <a href="#adatvizualizáció"
-  id="toc-adatvizualizáció">Adatvizualizáció</a>
-- <a href="#kointegréció-tesztelése"
-  id="toc-kointegréció-tesztelése">Kointegréció tesztelése</a>
-- <a href="#optimális-késleltetés-megtalálása"
-  id="toc-optimális-késleltetés-megtalálása">Optimális késleltetés
-  megtalálása</a>
-  - <a href="#stacionaritás" id="toc-stacionaritás">Stacionaritás</a>
-  - <a href="#késleltetés-meghatározása"
-    id="toc-késleltetés-meghatározása">Késleltetés meghatározása</a>
-- <a href="#modellépítés" id="toc-modellépítés">Modellépítés</a>
+- [Kezdeti beállítások](#kezdeti-beállítások)
+  - [Használt package-ek](#használt-package-ek)
+  - [Adatok megszerzése](#adatok-megszerzése)
+  - [Adatok átalakítása](#adatok-átalakítása)
+- [Adatvizualizáció](#adatvizualizáció)
+- [Kointegréció tesztelése](#kointegréció-tesztelése)
+- [Optimális késleltetés
+  megtalálása](#optimális-késleltetés-megtalálása)
+  - [Stacionaritás](#stacionaritás)
+  - [Késleltetés meghatározása](#késleltetés-meghatározása)
+- [Modellépítés](#modellépítés)
+  - [Alapmodell](#alapmodell)
+  - [Modellszűkítés](#modellszűkítés)
+- [Granger okság](#granger-okság)
+- [Impulzus-válaszfüggvények](#impulzus-válaszfüggvények)
+- [Becslési variancia dekompozíció](#becslési-variancia-dekompozíció)
 
 Ebben a portfolió fejezetben azt vizsgálom meg, hogy az
 [AMD](https://finance.yahoo.com/quote/AMD?p=AMD&.tsrc=fin-srch),
@@ -151,7 +148,7 @@ summary(johansen_test)
     ## Test type: maximal eigenvalue statistic (lambda max) , without linear trend and constant in cointegration 
     ## 
     ## Eigenvalues (lambda):
-    ## [1] 5.063385e-03 2.381383e-03 8.799114e-04 2.288984e-19
+    ## [1] 5.063385e-03 2.381383e-03 8.799114e-04 4.502479e-19
     ## 
     ## Values of teststatistic and critical values of test:
     ## 
@@ -173,9 +170,9 @@ summary(johansen_test)
     ## (This is the loading matrix)
     ## 
     ##              intc.l2        amd.l2       nvda.l2      constant
-    ## intc.d  0.0004994377 -0.0007538154 -0.0008416566 -1.526424e-19
-    ## amd.d  -0.0004713206  0.0046726538 -0.0010653154  1.737848e-18
-    ## nvda.d -0.0060660953  0.0048779829 -0.0023863493  7.045692e-18
+    ## intc.d  0.0004994377 -0.0007538154 -0.0008416566  1.275210e-18
+    ## amd.d  -0.0004713206  0.0046726538 -0.0010653154  4.234973e-20
+    ## nvda.d -0.0060660953  0.0048779829 -0.0023863493 -1.978401e-19
 
 A teszt egy jobboldali próba, ez azt jelenti, hogy akkor tudjuk
 elfogadni a nullhipotéziseket, ha az adott próbafüggvény kisebb vagy
@@ -211,6 +208,9 @@ Az ADF teszt hipotézisei:
 
 - H0: Az idősor nem stacioner, $\phi = 0$
 - H1: Az idősor stacionárius, $\phi \neq 0$
+
+A teszt nem csak egyféle módon végzi a tesztet, random-walkkal, valamint
+random walkkal és trenddel is megnézi a stacionaritást.
 
 ``` r
 adf.test(df$intc)
@@ -341,6 +341,9 @@ adf.test(df$nvda)
     ## ---- 
     ## Note: in fact, p.value = 0.01 means p.value <= 0.01
 
+Egyik idősor esetében sem lehet elutasítani a nullhipotézist, minden
+idősorom stacionárius.
+
 ``` r
 adf.test(diff(df$intc))
 ```
@@ -470,38 +473,60 @@ adf.test(diff(df$nvda))
     ## ---- 
     ## Note: in fact, p.value = 0.01 means p.value <= 0.01
 
+A differenciált idősorok már stacionerek, nincsen egységgyök a
+modellben. Minden esetben a p-értékek 1% alatt vannak, a
+nullhipotéziseket el lehet vetni.
+
 ## Késleltetés meghatározása
+
+A differenciált idősorokat a dataframe-be lementem és így nézem meg az
+optimális lag-okat.
 
 ``` r
 df$d_intc = c(NA, diff(df$intc))
 df$d_amd = c(NA, diff(df$amd))
 df$d_nvda = c(NA, diff(df$nvda))
 
-VARselect(df[-1,5:7], lag.max = 20)
+VARselect(df[-1,5:7], lag.max = 30)
 ```
 
     ## $selection
     ## AIC(n)  HQ(n)  SC(n) FPE(n) 
-    ##     19     11      1     19 
+    ##     30     11      1     30 
     ## 
     ## $criteria
     ##               1        2        3        4        5        6        7        8
-    ## AIC(n) 1.934359 1.929300 1.920119 1.918221 1.905830 1.890258 1.886351 1.871645
-    ## HQ(n)  1.942187 1.943000 1.939690 1.943665 1.937145 1.927444 1.929409 1.920575
-    ## SC(n)  1.956247 1.967605 1.974840 1.989360 1.993385 1.994229 2.006739 2.008449
-    ## FPE(n) 6.919605 6.884689 6.821767 6.808836 6.724987 6.621077 6.595263 6.498981
+    ## AIC(n) 1.942677 1.937631 1.928481 1.926575 1.914196 1.898654 1.894745 1.880049
+    ## HQ(n)  1.950526 1.951368 1.948105 1.952086 1.945595 1.935939 1.937918 1.929109
+    ## SC(n)  1.964620 1.976033 1.983339 1.997891 2.001970 2.002886 2.015435 2.017196
+    ## FPE(n) 6.977403 6.942288 6.879052 6.865954 6.781488 6.676903 6.650859 6.553831
     ##               9       10       11       12       13       14       15       16
-    ## AIC(n) 1.865179 1.853727 1.840811 1.842996 1.841276 1.842258 1.839574 1.838557
-    ## HQ(n)  1.919980 1.914401 1.907355 1.915412 1.919564 1.926417 1.929605 1.934460
-    ## SC(n)  2.018400 2.023365 2.026865 2.045467 2.060164 2.077562 2.091295 2.106694
-    ## FPE(n) 6.457098 6.383580 6.301659 6.315448 6.304600 6.310797 6.293891 6.287498
-    ##              17       18       19       20
-    ## AIC(n) 1.827059 1.821188 1.817967 1.818541
-    ## HQ(n)  1.928834 1.928833 1.931484 1.937930
-    ## SC(n)  2.111613 2.122158 2.135354 2.152345
-    ## FPE(n) 6.215629 6.179247 6.159387 6.162934
+    ## AIC(n) 1.873669 1.862212 1.849318 1.851519 1.849803 1.850782 1.848125 1.847108
+    ## HQ(n)  1.928616 1.923046 1.916039 1.924127 1.928299 1.935164 1.938394 1.943265
+    ## SC(n)  2.027273 2.032274 2.035838 2.054496 2.069238 2.086674 2.100475 2.115916
+    ## FPE(n) 6.512151 6.437970 6.355498 6.369505 6.358591 6.364819 6.347937 6.341491
+    ##              17       18       19       20       21       22       23       24
+    ## AIC(n) 1.835616 1.829742 1.826520 1.827104 1.814510 1.800410 1.800547 1.801087
+    ## HQ(n)  1.937660 1.937673 1.940339 1.946809 1.940103 1.931890 1.937914 1.944342
+    ## SC(n)  2.120882 2.131465 2.144701 2.161742 2.165606 2.167963 2.184558 2.201556
+    ## FPE(n) 6.269042 6.232334 6.212295 6.215932 6.138154 6.052224 6.053069 6.056355
+    ##              25       26       27       28       29       30
+    ## AIC(n) 1.799938 1.798898 1.798040 1.793943 1.785402 1.775901
+    ## HQ(n)  1.949080 1.953926 1.958956 1.960746 1.958092 1.954479
+    ## SC(n)  2.216865 2.232282 2.247882 2.260242 2.268159 2.275116
+    ## FPE(n) 6.049416 6.043142 6.037980 6.013313 5.962195 5.905839
+
+Mind az AIC, mind az FPE nagyon nagy lag-okat javasol. Ezeknél az
+információs kritériumoknál szigorúbb Hannan-Quinn információs kritérium
+a 11-es késleltetést preferálja, míg az annál is szigorúbb
+Bayes-Schwartz értéke az 1-es késleltetésnél a legkisebb. Ebben az
+esetben a Hannan-Quinn infromációs kritérium szerint fogok dönteni,
+11-es késleletés lesz az alapmodellemben a kettő darab hosszútávú közös
+pálya mellett.
 
 # Modellépítés
+
+## Alapmodell
 
 ``` r
 alapmodell = VECM(df[,2:4], lag = 11, r = 2)
@@ -520,9 +545,9 @@ summary(alapmodell)
     ## Number of variables: 3   Number of estimated slope parameters 108
     ## AIC 6161.923     BIC 6835.188    SSR 46727.5
     ## Cointegrating vector (estimated by ML):
-    ##             intc          amd       nvda
-    ## r1  1.000000e+00 1.110223e-16 -0.3736951
-    ## r2 -1.176903e-16 1.000000e+00 -0.7300483
+    ##            intc amd       nvda
+    ## r1 1.000000e+00   0 -0.3736951
+    ## r2 5.551115e-17   1 -0.7300483
     ## 
     ## 
     ##               ECT1                ECT2                Intercept         
@@ -574,9 +599,53 @@ summary(alapmodell)
     ## Equation amd  -0.0388(0.0370)     0.0318(0.0278)      -0.0036(0.0140)    
     ## Equation nvda -0.0821(0.0792)     -0.0406(0.0595)     0.1108(0.0300)***
 
+A közös hosszútávú pálya koefficiensei csak az AMD esetében
+szignifikánsak. Ezek jelentése a következő az AMD esetében:
+
+- ECT1: amennyiben az AMD elmozdul az első közös hosszútávú pályától,
+  akkor a következő időszakban 0,51%-al a távolodik még.
+- ECT2: amennyiben az AMD elmozdul a második közös hosszútávú pályától,
+  akkor az elmozdulás 0,63%-át hozza be a következő időszakban.
+
+Érdemes kiemelni a kontextus miatt, hogy az Intel a x86 CPU-k piacának
+nagy részét az [Intel
+dominálja](https://www.statista.com/statistics/735904/worldwide-x86-intel-amd-market-share/),
+míg a diszkrét GPU-k piacának nagy részét az [NVIDIA
+uralja](https://www.pcworld.com/article/1526632/intel-is-already-tied-with-amd-for-desktop-gpu-sales.html).
+A laptopokat is beleértve szintén az [Intel a legnagyobb
+szereplő](https://www.statista.com/statistics/754557/worldwide-gpu-shipments-market-share-by-vendor/)
+a GPU piacon. Azért érdemes külön választani a diszkrét és integrált
+GPU-k piacát, mivel a 2010-es évek végétől kezdődő kriptovaluta
+bányászatra elsősorban dedikált, asztali videókártyákat használnak, ami
+egy időben okozott is hiányt, mivel a bányászok rengeteg GPU-t
+vásároltak fel a piacról.
+
+Valószínűnek tartom, hogy a két hosszútávú közös pálya a CPU és GPU
+piacokat jelenti. Ha a szignifikanciaszinttől függetlenül nézzük a
+pályák koefficienseit, akkor látható, hogy az első pályától való
+eltérésnél az Intel közeledik, míg az AMD és az NVIDIA távolodik a
+következő időszakban. A második hosszútávú közös pályát nézve pont
+fordított a helyzet: az eltérés hatására az Intel távolodik, míg az AMD
+és az NVIDIA ledolgozza az eltérés egy részét. Feltevésem szerint az
+első hosszútávú pálya a processzorgyártók hosszútávú pályája, míg a
+második közös hosszútávú pálya a GPU gyártóké.
+
+Visszatérve az alapmodellre, nagyon érdekes, hogy az előző időszaki
+Intel árfolyam mindegyik részvényre negatív hatással van. Végig a 11
+késleltetésig nagyrészt vannak szignifikáns együtthatók, egyedül a
+négyes késleltetésnél nincsen egyik egyenletben sem szingifikáns
+koefficiens.
+
+## Modellszűkítés
+
+A modellszelekció miatt megnéztem több, más paraméterű modellt, ezek
+közül kettőt emelnék ki:
+
+Az egyik modellben egy közös hosszútávú pálya van 11 késleltetéssel:
+
 ``` r
-szukitett_modell = VECM(df[,2:4], lag = 11, r = 1)
-summary(szukitett_modell)
+szukitett_modell1 = VECM(df[,2:4], lag = 11, r = 1)
+summary(szukitett_modell1)
 ```
 
     ## #############
@@ -638,3 +707,112 @@ summary(szukitett_modell)
     ## Equation intc -0.0392(0.0141)**   0.0178(0.0071)*    
     ## Equation amd  0.0289(0.0278)      -0.0014(0.0140)    
     ## Equation nvda -0.0466(0.0595)     0.1151(0.0299)***
+
+A másik modellben pedig megmaradt a kettő közös hosszútávú pálya,
+azonban a késleltetést a Bayes-Schwartz IC által preferált 1-es
+késleltetésre cseréltem.
+
+``` r
+szukitett_modell2 = VECM(df[,2:4], lag = 1, r = 2)
+```
+
+    ## Warning in lineVar(data, lag, r = r, include = include, model = "VECM", : Estimation of more than 1 coint relationship is not possible with estim '2OLS'. Switched to Johansen 'ML'
+
+``` r
+summary(szukitett_modell2)
+```
+
+    ## #############
+    ## ###Model VECM 
+    ## #############
+    ## Full sample size: 3375   End sample size: 3373
+    ## Number of variables: 3   Number of estimated slope parameters 18
+    ## AIC 6467.342     BIC 6589.813    SSR 49258.62
+    ## Cointegrating vector (estimated by ML):
+    ##    intc          amd       nvda
+    ## r1    1 2.775558e-17 -0.4007844
+    ## r2    0 1.000000e+00 -0.8199959
+    ## 
+    ## 
+    ##               ECT1                ECT2                Intercept          
+    ## Equation intc -0.0004(0.0012)     0.0010(0.0011)      0.0257(0.0367)     
+    ## Equation amd  0.0043(0.0024).     -0.0042(0.0021)*    -0.1002(0.0722)    
+    ## Equation nvda -0.0010(0.0051)     -0.0039(0.0046)     0.0567(0.1561)     
+    ##               intc -1            amd -1              nvda -1           
+    ## Equation intc -0.1521(0.0183)*** -0.0596(0.0135)***  0.0247(0.0063)*** 
+    ## Equation amd  -0.1756(0.0360)*** -0.0330(0.0266)     0.0235(0.0124).   
+    ## Equation nvda -0.3148(0.0779)*** -0.0152(0.0575)     0.0141(0.0267)
+
+A modellek információs kritériumai:
+
+| Modell      | ECT | Lag | AIC               | BIC         |
+|:------------|:----|:----|:------------------|:------------|
+| Alap        | 2   | 11  | 6161.923 \*       | 6835.188    |
+| Szűkített 1 | 1   | 11  | 6167.099          | 6822.002    |
+| Szűkített 2 | 2   | 1   | 6467.342          | 6589.813 \* |
+|             |     |     | \* *Legkisebb IC* |             |
+
+Az AIC szerint az alapmodell a jobb, míg a BIC szerint az egy
+késleltetésű, ami érthető is, mivel akkor drasztikusan csökken a bevont
+változók száma. Mivel egyértelműen nem tudom eldönteni, hogy szűkítsem-e
+a modellt, ezért amellett döntök, hogy meghagyom az alapmodellt végleges
+modellnek, mert egészen a 11 lagig vannak szignifikáns magyarázó
+változók.
+
+# Granger okság
+
+# Impulzus-válaszfüggvények
+
+``` r
+plot(irf(alapmodell, impulse = "intl", response = "amd", n.ahead = 11, ortho = T))
+```
+
+![](vecm_hun_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->![](vecm_hun_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->![](vecm_hun_files/figure-gfm/unnamed-chunk-12-3.png)<!-- -->
+
+# Becslési variancia dekompozíció
+
+``` r
+fevd(alapmodell, n.ahead = 11)
+```
+
+    ## $intc
+    ##            intc          amd        nvda
+    ##  [1,] 1.0000000 0.0000000000 0.000000000
+    ##  [2,] 0.9971827 0.0006865115 0.002130831
+    ##  [3,] 0.9974429 0.0005763217 0.001980786
+    ##  [4,] 0.9939875 0.0019467483 0.004065718
+    ##  [5,] 0.9919573 0.0033495778 0.004693152
+    ##  [6,] 0.9902967 0.0038401597 0.005863190
+    ##  [7,] 0.9896361 0.0036791040 0.006684774
+    ##  [8,] 0.9896710 0.0032230879 0.007105905
+    ##  [9,] 0.9900275 0.0030485902 0.006923939
+    ## [10,] 0.9907985 0.0028721952 0.006329269
+    ## [11,] 0.9915559 0.0026576227 0.005786458
+    ## 
+    ## $amd
+    ##             intc       amd         nvda
+    ##  [1,] 0.11952818 0.8804718 0.0000000000
+    ##  [2,] 0.09832759 0.9013860 0.0002863849
+    ##  [3,] 0.09629075 0.9029947 0.0007145420
+    ##  [4,] 0.09213793 0.9065588 0.0013032612
+    ##  [5,] 0.08837652 0.9098980 0.0017254469
+    ##  [6,] 0.08454389 0.9138182 0.0016379393
+    ##  [7,] 0.07954031 0.9182444 0.0022153276
+    ##  [8,] 0.07552394 0.9216770 0.0027991069
+    ##  [9,] 0.06959718 0.9278332 0.0025696409
+    ## [10,] 0.06534546 0.9321202 0.0025343490
+    ## [11,] 0.06222157 0.9354585 0.0023199263
+    ## 
+    ## $nvda
+    ##             intc       amd      nvda
+    ##  [1,] 0.11222172 0.4692537 0.4185246
+    ##  [2,] 0.09138243 0.4820170 0.4266006
+    ##  [3,] 0.08753041 0.4824345 0.4300351
+    ##  [4,] 0.08768805 0.4905527 0.4217593
+    ##  [5,] 0.08760342 0.4940358 0.4183607
+    ##  [6,] 0.08693791 0.4935793 0.4194828
+    ##  [7,] 0.08142992 0.4912073 0.4273628
+    ##  [8,] 0.07685504 0.4960943 0.4270507
+    ##  [9,] 0.07119233 0.5115857 0.4172219
+    ## [10,] 0.06656733 0.5251726 0.4082601
+    ## [11,] 0.06348658 0.5295718 0.4069416
