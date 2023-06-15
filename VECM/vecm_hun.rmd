@@ -84,7 +84,7 @@ Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok
 
 # Kointegréció tesztelése
 
-Ahhoz, hogy tudja, hogy VECM vagy VAR modellt kell használjak, meg kell állapítanom, hogy van-e közös hosszútávú pályájuk az idősoroknak. Kointegráció esetén VECM modell a megfelelő, míg ha nincs közös távú hosszútávú pályája az idósoroknak, akkor VAR modellt kell alkalmazzak.
+Ahhoz, hogy tudja, hogy VEC(Vector Error Correction) vagy VAR(Vector AutoRegression) modellt kell használjak, meg kell állapítanom, hogy van-e közös hosszútávú pályájuk az idősoroknak. Kointegráció esetén VEC modell a megfelelő, míg ha nincs közös távú hosszútávú pályája az idósoroknak, akkor VAR modellt kell alkalmazzak.
 
 Erre egy *Johansen-tesztet* fogok végezni. A teszt érdekessége, hogy több nullhipotézist is felvet. Ez esetben a nullhipotézisek a következők, melyekben *r* a közös hosszútávú pályák száma:
 
@@ -105,7 +105,7 @@ Ilyen esetben én a kettő közös hosszútávú pályát venném kiindulópontn
 
 # Optimális késleltetés megtalálása
 
-Meg kellene határozzam az optimális késleltetést a VECM modellhez. Ez több lépésben fog megtörténni, először az idősorok stacionaritását kell tesztelnem. Amennyiben van egységgyök az idősorban, akkor stacionerré kell alakítanom őket majd mintha VAR modellhez keresném, meg kell határozzam az optimális késleltetést az információs kritériumokat felhasználva.
+Meg kellene határozzam az optimális késleltetést a VEC modellhez. Ez több lépésben fog megtörténni, először az idősorok stacionaritását kell tesztelnem. Amennyiben van egységgyök az idősorban, akkor stacionerré kell alakítanom őket majd mintha VAR modellhez keresném, meg kell határozzam az optimális késleltetést az információs kritériumokat felhasználva.
 
 ## Stacionaritás
 
@@ -199,7 +199,7 @@ Az AIC szerint az alapmodell a jobb, míg a BIC szerint az egy késleltetésű, 
 
 # Granger okság
 
-
+A VEC modelleknél a Granger okság vizsgálata bonyolultabb, mint a VAR modelleknél, ezért előtte különböző
 
 # Impulzus-válaszfüggvények
 
