@@ -28,6 +28,7 @@ library(lmtest)
 library(aTSA)
 library(vars)
 library(tsDyn)
+library(aod)
 ```
 
 Egy részvénynek egy napra több értékei is lehet, például az adott napi maximum, minimum, a nyitó vagy záró értéke. A továbbiakban az egyes részvények záró értékeivel fogok dolgozni.
@@ -199,7 +200,63 @@ Az AIC szerint az alapmodell a jobb, míg a BIC szerint az egy késleltetésű, 
 
 # Granger okság
 
-A VEC modelleknél a Granger okság vizsgálata bonyolultabb, mint a VAR modelleknél, ezért előtte különböző
+A VEC modelleknél a Granger okság vizsgálata bonyolultabb, mint a VAR modelleknél. Először is meg kell keressem, hogy az egyes egyenletek a koefficinsek és a varaincia-kovariancia táblázatban hol helyezkednek el.
+
+```{r}
+coef = coef(alapmodell)
+knitr::kable(coef, format = "html")
+```
+
+Az első egyenelet az intc, majd az amd és az nvda követi.
+
+```{r}
+vcov = vcov(alapmodell)
+knitr::kable(vcov, format = "html")
+```
+
+A Variancia-kovariancia táblázatban a [1:36,1:36] helyen az intc, [37:72,37:72] helyen az amd és végül a [73:108,73:108] helyen az nvda egyenlete van.
+
+A Granger okság szerint az az okozó változó, ami időben előbb van. A Granger-okság tesztelésére egy Wald-tesztet fogok használni.
+
+-   A teszt nullhipotézise szerint X idősor nem Granger okozza Y idősort, X idősor lagjai nem magyarázzák Y idősor aktuális értékét.
+-   Az alternatív hipotézis szerint az X idősor Granger okozza Y idősort.
+
+Mivel a változók közötti Granger-okságot kell megállapítsam, ezért 3 változónál, 2 irányban ezért összesen 6 db Wald-tesztet kell végezzek.
+
+```{r}
+cat("amd -> intel\n")
+wald.test(b = coef[1,],
+          Sigma = vcov[1:36,1:36],
+          Terms = c(5,8,11,14,17,20,23,26,29,32,35))
+
+cat("\n\namd -> nvidia\n")
+wald.test(b = coef[3,],
+          Sigma = vcov[73:108,73:108],
+          Terms = c(5,8,11,14,17,20,23,26,29,32,35))
+
+cat("\n\nintel -> amd\n")
+wald.test(b = coef[2,],
+          Sigma = vcov[37:72,37:72],
+          Terms = c(4,7,10,13,16,19,22,25,28,31,34))
+
+cat("\n\nintel -> nvidia\n")
+wald.test(b = coef[3,],
+          Sigma = vcov[73:108,73:108],
+          Terms = c(4,7,10,13,16,19,22,25,28,31,34))
+
+cat("\n\nnvidia -> amd\n")
+wald.test(b = coef[2,],
+          Sigma = vcov[37:72,37:72],
+          Terms = c(6,9,12,15,18,21,24,27,30,33,36))
+
+cat("\n\nnvidia -> intel\n")
+wald.test(b = coef[1,],
+          Sigma = vcov[1:36,1:36],
+          Terms = c(6,9,12,15,18,21,24,27,30,33,36))
+
+```
+
+Mindegyik egyenlet 1% alatt szignifikáns. 
 
 # Impulzus-válaszfüggvények
 
@@ -209,6 +266,7 @@ plot(irf(alapmodell, impulse = "intl", response = "amd", n.ahead = 11, ortho = T
 
 
 # Becslési variancia dekompozíció
+
 ```{r}
 fevd(alapmodell, n.ahead = 11)
 ```
