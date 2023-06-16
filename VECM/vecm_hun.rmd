@@ -75,17 +75,18 @@ ggplot(df, aes(x = time))+
   geom_line(aes(y = amd, col = "AMD"))+
   geom_line(aes(y = nvda, col = "NVIDIA"))+
   scale_y_continuous(labels = scales::dollar_format())+
+  scale_x_date(date_breaks = "years", date_labels = "%y")+
   scale_color_manual(values = c("#ED1C24", "#0071C5", "#76B900"))+
   theme_minimal()+
   theme(legend.title = element_blank())+
   labs(x = "Idő", y = "Részvény árfolyam")
 ```
 
-Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok.
+Már a grafikonon is látszik, hogy valószínűleg nem stacionerek az idősorok. Látható, hogy a kezdetben az NVIDIA és az AMD együtt mozgott, ahogy az Intel is magasabb pályán, de hasonlóan. Ezt követően körülbelül 2015 Q4-től erőteljes emelkedésbe kezdett az NVIDIA, amit az AMD nagyrészt lekövetett, azonban korántsem olyan meredeken. Az Intel is növekedett ez idő alatt, de nem tűnik úgy, mintha együtt mozgott volna a másik két céggel. Ez lehet akár azért is, mert ezidő tájt kezdődött el a kriptobányászat már terjengeni a levegőben (de csak nagyon szubkultúrális szinten ekkor még, [2017 decemerétől lesz világszinten felkapott](https://trends.google.com/trends/explore?date=all&q=%2Fm%2F05p0rrx&hl=hu)), ami nagyon videókártya-igényes tevékenység. Mindhárom cégnél 2021 végén volt egy csúcspot, ami után csökkenni kezdett az árfolyamuk, majd 2022 Q4-től megint emelkedés látszott, az NVIDIA árfolyama a 2021-es csúcsát is túlszárnyalta.
 
 # Kointegréció tesztelése
 
-Ahhoz, hogy tudja, hogy VEC(Vector Error Correction) vagy VAR(Vector AutoRegression) modellt kell használjak, meg kell állapítanom, hogy van-e közös hosszútávú pályájuk az idősoroknak. Kointegráció esetén VEC modell a megfelelő, míg ha nincs közös távú hosszútávú pályája az idósoroknak, akkor VAR modellt kell alkalmazzak.
+Ahhoz, hogy tudjam, hogy VEC(Vector Error Correction) vagy VAR(Vector AutoRegression) modellt kell-e használjak, meg kell állapítanom, hogy van-e közös hosszútávú pályájuk az idősoroknak. Kointegráció esetén VEC modell a megfelelő, míg ha nincs közös távú hosszútávú pályája az idósoroknak, akkor VAR modellt kell alkalmazzak.
 
 Erre egy *Johansen-tesztet* fogok végezni. A teszt érdekessége, hogy több nullhipotézist is felvet. Ez esetben a nullhipotézisek a következők, melyekben *r* a közös hosszútávú pályák száma:
 
@@ -198,9 +199,31 @@ A modellek információs kritériumai:
 
 Az AIC szerint az alapmodell a jobb, míg a BIC szerint az egy késleltetésű, ami érthető is, mivel akkor drasztikusan csökken a bevont változók száma. Mivel egyértelműen nem tudom eldönteni, hogy szűkítsem-e a modellt, ezért amellett döntök, hogy meghagyom az alapmodellt végleges modellnek, mert egészen a 11 lagig vannak szignifikáns magyarázó változók.
 
-# Granger okság
+## Stabilitás tesztelése
 
-A VEC modelleknél a Granger okság vizsgálata bonyolultabb, mint a VAR modelleknél. Először is meg kell keressem, hogy az egyes egyenletek a koefficinsek és a varaincia-kovariancia táblázatban hol helyezkednek el.
+A modell staibilitásának tesztelésére először megvizsgálom, hogy a hibatagok fehérzajok-e, majd azt is megnézem, hogy normális eloszlásúak-e.
+
+A Breusch-Godfrey teszt nullhipotézise szerint az $\hat{u_t}$-re felírt segédregresszóból $R^2 = 0$, vagyis a VECM egyenleteinek hibatagjai fehérzajok.
+```{r}
+lapply(as.data.frame(resid(alapmodell)), function(i) bgtest(i ~ 1, order = 11))
+```
+Nagyon magasak a p-értékek, a nullhipotézist nem lehet elvetni egyik esetben sem.
+
+A hibatagok normális eloszlásának is megvizsgálatához egy Shapiro-Wilk tesztet fogok alkalmazni. A teszt hipotézisei:
+
+-   H0: a hibatagok normális eloszlásúak
+-   H1: a hibatagok nem normális eloszlásúak
+
+```{r}
+lapply(as.data.frame(resid(alapmodell)), function(i) shapiro.test(i))
+```
+Mindegyik tesztben nagyon alacsony p-értékek jöttek ki, H0-t el lehet vetni még 1%-os szignifikancia szint mellett is. Egyik egyenlet hibatagja sem normális eloszlású.
+
+# Granger-okság
+
+A Granger-okság két idősor kapcsolatát vizsgálja, definíció szerint $X$ idősor Granger okozza $Y$ idősort, ha $X$ valamely múltja szignifikáns hatéssal van $Y$ aktuális értékére.
+
+A VEC modelleknél a Granger okság vizsgálata bonyolultabb, mint a VAR modelleknél. Először is meg kell keressem, hogy az egyes egyenletek a koefficinsek és a variancia-kovariancia táblázatban hol helyezkednek el.
 
 ```{r}
 coef = coef(alapmodell)
@@ -211,63 +234,75 @@ Az első egyenelet az intc, majd az amd és az nvda követi.
 
 ```{r}
 vcov = vcov(alapmodell)
-knitr::kable(vcov, format = "html")
 ```
 
-A Variancia-kovariancia táblázatban a [1:36,1:36] helyen az intc, [37:72,37:72] helyen az amd és végül a [73:108,73:108] helyen az nvda egyenlete van.
+A Variancia-kovariancia táblázatban a [1:36,1:36] helyen az intc, [37:72,37:72] helyen az amd és végül a [73:108,73:108] helyen az nvda egyenlete van. A táblázatot nem szándékozom megjeleníteni, mivel feleslegesen sok helyet foglalna el, azonban a Githubon található `.rmd` futtatásával meg lehet tekinteni. 
 
 A Granger okság szerint az az okozó változó, ami időben előbb van. A Granger-okság tesztelésére egy Wald-tesztet fogok használni.
 
--   A teszt nullhipotézise szerint X idősor nem Granger okozza Y idősort, X idősor lagjai nem magyarázzák Y idősor aktuális értékét.
--   Az alternatív hipotézis szerint az X idősor Granger okozza Y idősort.
+-   A teszt nullhipotézise szerint $X$ idősor nem Granger okozza $Y$ idősort, $X$ idősor lagjai nem magyarázzák $Y$ idősor aktuális értékét.
+-   Az alternatív hipotézis szerint az $X$ idősor Granger okozza $Y$ idősort.
 
 Mivel a változók közötti Granger-okságot kell megállapítsam, ezért 3 változónál, 2 irányban ezért összesen 6 db Wald-tesztet kell végezzek.
 
 ```{r}
-cat("amd -> intel\n")
+# amd -> intel
 wald.test(b = coef[1,],
           Sigma = vcov[1:36,1:36],
           Terms = c(5,8,11,14,17,20,23,26,29,32,35))
 
-cat("\n\namd -> nvidia\n")
+# amd -> nvidia
 wald.test(b = coef[3,],
           Sigma = vcov[73:108,73:108],
           Terms = c(5,8,11,14,17,20,23,26,29,32,35))
 
-cat("\n\nintel -> amd\n")
+# intel -> amd
 wald.test(b = coef[2,],
           Sigma = vcov[37:72,37:72],
           Terms = c(4,7,10,13,16,19,22,25,28,31,34))
 
-cat("\n\nintel -> nvidia\n")
+# intel -> nvidia
 wald.test(b = coef[3,],
           Sigma = vcov[73:108,73:108],
           Terms = c(4,7,10,13,16,19,22,25,28,31,34))
 
-cat("\n\nnvidia -> amd\n")
+# nvidia -> amd
 wald.test(b = coef[2,],
           Sigma = vcov[37:72,37:72],
           Terms = c(6,9,12,15,18,21,24,27,30,33,36))
 
-cat("\n\nnvidia -> intel\n")
+# nvidia -> intel
 wald.test(b = coef[1,],
           Sigma = vcov[1:36,1:36],
           Terms = c(6,9,12,15,18,21,24,27,30,33,36))
 
 ```
 
-Mindegyik egyenlet 1% alatt szignifikáns. 
+Mindegyik egyenlet 1% alatt szignifikáns, el lehet vetni a nullhipotézist minden esetben. Ez azt jelenti, hogy mindegyik idősor Grager-okozza a másik kettőt. Ez a Granger-okság egy különös esete, mivel az egyes idősorok késleltetései minden esetben magyarázzák a más idősorok aktuális értékét.
 
 # Impulzus-válaszfüggvények
 
+Az impulzus-válaszfüggvények azt mutatják meg, hogy az egységnyi szórásnyi sokk az egyik idősoron, akkor az hogyan cseng le önmagában és az összes többi változóban. 
+
 ```{r}
-plot(irf(alapmodell, impulse = "intl", response = "amd", n.ahead = 11, ortho = T))
+plot(irf(alapmodell, impulse = "intl", response = "amd", n.ahead = 30, ortho = F))
 ```
 
+Az intc-ben bekövetkező sokk az amd-ben és az nvda-ban is szignifikáns csökkenést okoz az első, illetve az 5-6. késleltetéstől minimum 30 lagig.
+
+Az amd-ben bekövetkező sokk a 3-6. késleletésben minimális szingifikáns csökkenést okoz, azonban a többi időszakban a 95%-os konfidenci intervallumba beleesik a nulla, így ott feltehetőleg nincsen hatása. Az nvda esetében a 8-9. lagban van szignifikáns növekedés az egységnyi amd-ben bekövetkező sokk hatására, majd szintén nem szignifikáns a hatás 95%-on.
+
+Az nvda-ban bekövetkező sokknak nincsen szingnifikáns hatása az intc-re és amd-re.
 
 # Becslési variancia dekompozíció
 
+A becslési varianci dekompozíció azt mutatja meg, hogy az adott eredményváltozónak a standrad becslési hibájának négyzetét mekkora részben lehet magyarázni a modell többi változójával. 
 ```{r}
 fevd(alapmodell, n.ahead = 11)
 ```
 
+Az intc becslési varianciájának ~99%-át lehet magyarázni a saját késleltetésével, az amd és nvda elhanyagolható mértékben járul hozzá ehhez a 11 késleltetésen keresztül.
+
+Az amd becslési varianciájának 88-93%-át lehet magyarázni a saját lagjával, a maradék 12-6%-ot az intel késleltetéseival, az nvda itt is elhanyagolható mértékben szerepel.
+
+Az nvda becslési varianciáját az első késleltetésben 11%-ban az intel, 46%-ban az amd és 41%-ban önmaga magyarázza. A további időszakokban az amd magyarázó ereje tovább nő, egészen majdnem 53%-ig, az intc lecsökken 6%-ra, illetve az nvda is lecsökken minimálisan, 40%-ra.
