@@ -75,7 +75,6 @@ ggplot(df, aes(x = time))+
   geom_line(aes(y = amd, col = "AMD"))+
   geom_line(aes(y = nvda, col = "NVIDIA"))+
   scale_y_continuous(labels = scales::dollar_format())+
-  scale_x_date(date_breaks = "years", date_labels = "%y")+
   scale_color_manual(values = c("#ED1C24", "#0071C5", "#76B900"))+
   theme_minimal()+
   theme(legend.title = element_blank())+
