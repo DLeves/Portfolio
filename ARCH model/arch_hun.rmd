@@ -2,10 +2,153 @@
 title: "Untitled"
 author: "Dittrich Levente"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  github_document:
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+```
+
+Portfolióm ezen fejezetében a magyar inflációra építek ARIMA modellt, illetve amennyiben a szórása nem állandó az idősornak, akkor GARCH modellel fogom korrigálni ezt. Mivel az inflációt többféle képpen szokás bemutatni, mint például az éves átlagos inflációt, az előző havihoz képest, az előző év azonos időszakához képest, az előző év decemberéhez képest az árszínvonal változást, ezért ezek közül választanom kell. Moderált mennyiségű töprengés után arra jutottam, hogy az [előző hónap azonos időszakához képesti inflációt](https://ec.europa.eu/eurostat/databrowser/view/PRC_HICP_MANR__custom_3761882/bookmark/table?lang=en&bookmarkId=4ad27e6f-358a-4a3d-82a0-587d69a833eb) választom. Az adatokat az Eurostattól kérem le, mert van erre package R-ben, nem kell letölteni külön az adatokat. Mivel ez folyamatosan frissül, ezért a reprodukálhatóság érdekében a jelenlegi legfrissebb adatot, a 2023 májusit veszem utolsó adatnak.
+
+
+# Kezdeti beállítások
+
+## Használt packagek
+```{r, error=FALSE, warning=FALSE}
+library(eurostat)
+library(knitr)
+library(tidyverse)
+library(aTSA)
+library(lmtest)
+library(FinTS)
+```
+
+## Adatok lekérése
+
+Az `eurostat` package-el egyenesen az eurostat oldaláról tölhetem le az adatsort.
+
+```{r}
+euInf = get_eurostat("prc_hicp_manr")
+kable(head(euInf))
+```
+
+## Adatok átalakításas
+
+```{r}
+df = euInf %>%
+  filter(geo == "HU", coicop == "CP00", time <= "2023-05-01")
+```
+
+```{r, include=FALSE}
+rm(euInf)
+```
+
+# Adatvizualizáció
+
+```{r}
+ggplot(df, aes(time, values))+
+  geom_line()+
+  theme_minimal()+
+  labs(x = "Idő", y = "Infláció az előző év azonos időszakához képest")+
+  scale_y_continuous(labels = function(x) paste0(x, "%"))
+```
+
+# Box-Jenkins módszer
+
+## 1. lépés - Stacionaritás tesztelése
+
+```{r}
+adf.test(df$values)
+```
+
+## 2. lépés - Stacionerré alakítás
+
+```{r}
+df$dValues = c(NA, diff(df$values))
+adf.test(df$dValues)
+```
+
+```{r}
+ggplot(df, aes(time, dValues))+
+  geom_line()+
+  theme_minimal()+
+  labs(x = "Idő", y = "Differeciázott infláció")+
+  scale_y_continuous(labels = function(x) paste0(x, "%"))
+```
+
+## 3. lépés - Fehérzaj tesztelése
+
+```{r}
+bgtest(df$dValues ~ 1, order = 24)
+```
+
+## 4. lépés - Korrelogramok
+
+```{r}
+acf(df$dValues[-1])
+```
+
+```{r}
+pacf(df$dValues[-1])
+```
+
+## 5. lépés - Modellillesztés
+```{r}
+arima113 = arima(df$values, order = c(1,1,3))
+coeftest(arima113)
+```
+
+```{r}
+arima211 = arima(df$values, order = c(2,1,1))
+coeftest(arima211)
+```
+
+
+```{r}
+arima111 = arima(df$values, order = c(1,1,1))
+coeftest(arima111)
+```
+
+```{r, warning=FALSE}
+forecast::auto.arima(df$values)
+arima221 = arima(df$values, order = c(2,2,1))
+```
+
+```{r}
+IC = AIC(arima113,arima111, arima211, arima221)
+IC$BIC = BIC(arima113,arima111, arima211, arima221)[,2]
+kable(IC)
+```
+
+## 6. lépés - Fehérzaj tesztelés
+
+```{r}
+Box.test(arima111$residuals, type = "Ljung-Box")
+```
+
+```{r}
+shapiro.test(arima111$residuals)
+```
+
+# Arch modell
+
+```{r}
+hist(arima111$residuals)
+```
+
+```{r}
+acf(df$dValues[-1]^2)
+```
+
+```{r}
+pacf(df$dValues[-1]^2)
+```
+
+
+```{r}
+ArchTest(df$dValues)
 ```
 
