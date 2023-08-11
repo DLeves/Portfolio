@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "ARIMA modell ARCH hatások vizsgálatával"
 author: "Dittrich Levente"
 date: "`r Sys.Date()`"
 output: 
@@ -11,13 +11,17 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Portfolióm ezen fejezetében a magyar inflációra építek ARIMA modellt, illetve amennyiben a szórása nem állandó az idősornak, akkor GARCH modellel fogom korrigálni ezt. Mivel az inflációt többféle képpen szokás bemutatni, mint például az éves átlagos inflációt, az előző havihoz képest, az előző év azonos időszakához képest, az előző év decemberéhez képest az árszínvonal változást, ezért ezek közül választanom kell. Moderált mennyiségű töprengés után arra jutottam, hogy az [előző hónap azonos időszakához képesti inflációt](https://ec.europa.eu/eurostat/databrowser/view/PRC_HICP_MANR__custom_3761882/bookmark/table?lang=en&bookmarkId=4ad27e6f-358a-4a3d-82a0-587d69a833eb) választom. Az adatokat az Eurostattól kérem le, mert van erre package R-ben, nem kell letölteni külön az adatokat. Mivel ez folyamatosan frissül, ezért a reprodukálhatóság érdekében a jelenlegi legfrissebb adatot, a 2023 májusit veszem utolsó adatnak.
+Portfolióm ezen fejezetében a magyar inflációra építek ARIMA modellt, illetve amennyiben a szórása nem állandó az idősornak, akkor GARCH modellel fogom korrigálni ezt.
 
+Mivel az inflációt többféle képpen szokás bemutatni, mint például az éves átlagos inflációt, az előző havihoz képest, az előző év azonos időszakához képest, az előző év decemberéhez képest az árszínvonal változást, ezért ezek közül választanom kell. Moderált mennyiségű töprengés után arra jutottam, hogy az [előző hónap azonos időszakához képesti inflációt](https://ec.europa.eu/eurostat/databrowser/view/PRC_HICP_MANR__custom_3761882/bookmark/table?lang=en&bookmarkId=4ad27e6f-358a-4a3d-82a0-587d69a833eb) választom.
+
+Az adatokat az Eurostattól kérem le, mert van erre package R-ben, nem kell letölteni külön az adatokat. Mivel ez folyamatosan frissül, ezért a reprodukálhatóság érdekében a jelenlegi legfrissebb adatot, a 2023 májusit veszem utolsó adatnak.
 
 # Kezdeti beállítások
 
 ## Használt packagek
-```{r, error=FALSE, warning=FALSE}
+
+```{r, error=FALSE, warning=FALSE, message=FALSE}
 library(eurostat)
 library(knitr)
 library(tidyverse)
@@ -28,25 +32,49 @@ library(FinTS)
 
 ## Adatok lekérése
 
-Az `eurostat` package-el egyenesen az eurostat oldaláról tölhetem le az adatsort.
+Az `eurostat` package-el egyenesen az Eurostat oldaláról tölhetem le az adatsort. Az adatsor első 6 adatát szemügyre véve több fontos tulajdonság látszik.
 
 ```{r}
 euInf = get_eurostat("prc_hicp_manr")
 kable(head(euInf))
 ```
 
-## Adatok átalakításas
+A következők az oszlopok az adattáblában:
+
+| Eredeti név | Magyar név | Leírás                                                                              |
+|:-----------------------|:-----------------------|:-----------------------|
+| unit        | egység     | az adatok egysége, ez minden esetben az előző év azonos időszakához viszonyított(%) |
+| coicop      | fajta      | az infláció részletes csoportjai                                                    |
+| geo         | terület    | az országok kódjai                                                                  |
+| time        | idő        | a hónap első napja                                                                  |
+| values      | értékek    | maguk az értékek                                                                    |
+
+## Adatok átalakítása
+
+Az 5 db változóra 3 043 278 megfigyelés tartozik. Ez azért lehet, mert nagyon sok alcsoport és azoknak is al-al csoportjai vannak, szám szerint összesen 476db minden egyes területi egységre minden negyedévben 1997 január óta. Nekem nincsen szükségem minden adatra, mivel a magyar fogyasztói árváltozást szeretném vizsgálni, és annak sem alfajait, hanem az egész fogyasztői kosár inflációját.
+
+Az Eurostat oldalán a metaadatokat elolvasva derül ki, hogy a *CP00* kódú változóra van szükségem. Így tehát szűröm a dataframet terület, fajta, valamit idő szerint, a reprodukálhatóság miatt.
 
 ```{r}
 df = euInf %>%
   filter(geo == "HU", coicop == "CP00", time <= "2023-05-01")
 ```
 
+Még egy fontos észrevétel: az adatoknál a legfrisebb adat van felül, ez esetenként problémát okozhat, ezért idő szerint növekvő sorrendbe rendezem az adatokat.
+
+```{r}
+df = df %>%
+  arrange(time)
+```
+
+
 ```{r, include=FALSE}
 rm(euInf)
 ```
 
 # Adatvizualizáció
+
+Az adatokat ábrázolva a következőt látjuk:
 
 ```{r}
 ggplot(df, aes(time, values))+
@@ -56,13 +84,38 @@ ggplot(df, aes(time, values))+
   scale_y_continuous(labels = function(x) paste0(x, "%"))
 ```
 
+A 90-es évek végén magas inflációval kezdődik az idősor, amely többé-kevésbé csökkenő trendet mutat, némi *random walk*-kal egészen 2015-ig. A 2014-15-ös években még defláció is fellépett. Ebben az időszakban a fejlett országok között sokan kűzdüttek deflációval, mint például [Japán](https://www.bbc.com/news/business-32081871) és az [Európai Unió tagállamai](https://www.bbc.com/news/business-30707644). Az utóbbi országokban a csökkenő energiaárak okozták a fejtörést a központi bankoknak.
+
+Ezek után az infláció emelkedni kezdett, de még 5% alatt maradva, egészen 2021 szeptemberéig. Ekkor lépett 5% fölé az előző év azonos időszakához viszonyított fogyasztói kosár árváltozása és kezdett nőni exponenciálisan a továbbiakban. Ennek véleményem szerint több oka is lehet.\
+
+A makroökonómiában használatos AS-AD görbét alapul véve az energiaárak emelkedése hatalmas sokkot okozhatott a keresleti oldalon. Úgy gondolom, hogy az elszálló inflációnak keresleti oldali okai is vannak, mégpedig a túlfűtött gazdaság, ami a hosszútávú egyensúlyi kibocsátásnál, vagyis a rendelkezésre álló tőke, munka, termelékenység függvényénél nagyobb volt a gazdaság teljesítménye, mivel hatalmas mennyiségű pénzt öntöttek bele, ami növelte a fogyasztást, beruházásokat és a kormányzati költéseket is. A költségvetési hiányban látszódó kormányzati "pénzszórás" (transzferek) 2021-22-ben jelentősen növelte a forgásban lévő pénzmennyiséget és fogyasztást.\
+
+Szintén problémának vélem az energiaár-növekedést pénzpiaci, illetve nemzetközi gazdasági szempontból, mivel a különböző energiahordozókért rendszerint nem forintban törleszti az állam a számlát, hanem más devizában. Ez azt implikálja, hogy amikor nő az energiaár, akkor megnő a kereslet a tegyük fel, hogy az euró felé. Ekkor az állam a forintját eladva eurót vesz, ami csökkenti a forint iránti keresletet az euróval szemben, ami a forint árfolyamát gyengíti. Az [MNB inflációs jelentésében](https://www.mnb.hu/letoltes/hun-ir-digitalis-21.pdf) (78. oldal teteje) szerepel, hogy 1%-nyi árfolyam felértékelődés 0,3%-nyi infláció csökkenést okoz. Ez a hatás a leértékelődésnél is jelen van. Magyarország kis, nyitott gazdaság, sok importált termékkel, a kereskedők nagyon gyorsan tudják az áraikat növelni(hogy megmaradjon a várt profitjuk), az árfolyamnövekedéssel párhuzamosan. Sőt, mivel a gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig nem csökkentik az áraikat. Egy másik, inkább teoretikusabb felvetés az angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb mértékben, mivel a fogyasztók az áremelkedéssel már több helyen találkoztak, így kevesebb ellenállásba, kereslet csökkenésbe ütközik az áremelés a még nagyobb profit érdekében.\
+
+Nézőpontom szerint ez egy komplex probléma, amit a kormány és a jegybank megfelelő kooperációja nagyon magasan képzett szakértői gárdával tudna bizonyos mértékig ellensúlyozni.
+
 # Box-Jenkins módszer
 
+A következőkben a Box-Jenkins módszer lépésein fogok végighaladni.
+
 ## 1. lépés - Stacionaritás tesztelése
+
+Az erős stacionaritás azt jelenti, hogy az idősorok minden véges dimenziós eloszlása eltolásinvariás. Ez egy olyan erős követelmény, amit inkább a valószínűségszámításban használnak gyakran, azonban ökonometriában túl szigorú követelmény, ezért szokás gyenge stacionaritással dolgozni. Ez azt jelenti, hogy az idősor szórása és várható értéke időben állandó. A stacionaritás teszteléséhez egy Augmented Dickey-Fuller tesztet fogok végezni.
+
+Az ADF teszt hipotézisei:
+
+-   H0: Az idősor nem stacioner, $\phi = 0$
+-   H1: Az idősor stacionárius, $\phi \neq 0$
+
+A teszt nem csak egyféle módon végzi a tesztet, random-walkkal, valamint random walkkal és trenddel is megnézi a stacionaritást.
+
 
 ```{r}
 adf.test(df$values)
 ```
+
+Nagyon magasak a p-értékek, az idősor biztosan nem stacioner, egyik esetben sem.
+
 
 ## 2. lépés - Stacionerré alakítás
 
@@ -70,6 +123,10 @@ adf.test(df$values)
 df$dValues = c(NA, diff(df$values))
 adf.test(df$dValues)
 ```
+
+A stacionaritás elérése érdekében differenciáztam az idősort. A differenciált idősor esetében minden esetben el lehet utasítani a nullhipotézist, vagyis nincsen egységgyök a modellben, stacioner viselkedésű. 
+
+A differenciált idősor ábrázolva így néz ki:
 
 ```{r}
 ggplot(df, aes(time, dValues))+
@@ -79,64 +136,140 @@ ggplot(df, aes(time, dValues))+
   scale_y_continuous(labels = function(x) paste0(x, "%"))
 ```
 
+A grafikonon látszik, hogy 2020-tól a differenciált idősor volatilitása egyre nagyobbak lesz.
+
 ## 3. lépés - Fehérzaj tesztelése
+
+Az ARIMA modell építése előtt meg kell nézni, hogy fehérzaj-e az idősor. Amennyiben igen, akkor nem tudunk modell építeni, az adatok egyszerű zajok.
+
+A Breusch-Godfrey teszt nullhipotézise szerint az $\hat{u_t}$-re felírt segédregresszóból $R^2 = 0$, vagyis a VECM egyenleteinek hibatagjai fehérzajok.
 
 ```{r}
 bgtest(df$dValues ~ 1, order = 24)
 ```
 
+Az alacsony p-érték miatt el lehet utasítani a nullhipotézist minden szokványos szignifikanciaszinten. Az differenciált idősor nem fehérzaj.
+
 ## 4. lépés - Korrelogramok
+
+Az autokorrelációs korrelogram a mozgóátlag(MA) folyamatokhoz szükséges késleltetések meghatározásához szükséges az ARIMA modellbe.
 
 ```{r}
 acf(df$dValues[-1])
 ```
 
+Szignifikánsan 5 késleltetésig tér el 0-tól az autokorreláció, illetve a 12. késleltetésnél.
+
+A parciális autokorrelációs korrelogram a mozgóátlag(MA) folyamatokhoz szükséges késleltetések meghatározásához szükséges az ARIMA modellbe.
+
 ```{r}
 pacf(df$dValues[-1])
 ```
 
+Nullától szignifikánsan eltérő az első, illetve a 12. és 13. késleltetés. A 12-13. késleltetés valószínűleg a havi adatok miatt egyfajta szezonalitás. Ennek kezelésére lehet úgy differenciálni az idősort, hogy nem az előző adathoz képest nézzük az eltérést, hanem az előző évi azonos adathoz. Ezzel a módszerrel azonban nem 1, hanem még 12, azaz 13 db adat veszik el, amennyiben még a szezonalitásos differenciázás után még differenciázni kell.
+
+
+### Szezonalitás korrigálása
+
+```{r, error=FALSE, warning=FALSE}
+df2 = data.frame(
+  time = df$time[-c(1:12)],
+  values = diff(df$values,12)
+)
+
+plot.ts(df2$values)
+```
+
+Már a grafikonon is látszik, hogy az idősor szórása és átlaga időben nem állandó, ezért mégegyszer differenciálom, ezúttal az előző adathoz képest.
+
+```{r}
+df2$dvalues = c(NA, diff(df2$values))
+
+plot.ts(diff(df2$values))
+
+adf.test(diff(df2$values))
+```
+
+Az ADF-teszt szerint mostmár gyengén stacioner az idősor. Visszatérhetek az ACF és PACF vizsgálatához.
+
+```{r}
+acf(df2$dvalues[-1])
+pacf(df2$dvalues[-1])
+```
+ 
+Még mindig fenn áll a szezonalitás. Ez az adatok milyensége miatt lehet, mivel eleve az előző év azonos időszakához van viszonyítva az árszínvonal.
+
+Mivel valószínűleg ezt nem tudom megoldani differenciázással, ezért a modellezésnél az eredeti adatokat fogom használni.
+
 ## 5. lépés - Modellillesztés
-```{r}
-arima113 = arima(df$values, order = c(1,1,3))
-coeftest(arima113)
-```
+
+Elsőként egy nagyobb modellel kezdenék, egy ARIMA(3,1,3)-al, azaz egyszer differenciált, mind a mozgóátlag, mind az autóregresszív paraméter 3 értékű. Ez azt jelenti, hogy 3 késleltetésig lesznek a modellben mozgóátlag és autoregresszív folyamatok. 
 
 ```{r}
-arima211 = arima(df$values, order = c(2,1,1))
-coeftest(arima211)
+arima313 = arima(df$values, order = c(3,1,3))
+coeftest(arima313)
 ```
 
+Az ar1 paraméteren kívül minden együttható szignifikáns, lehet növelve az AR és MA értékeit szintén szignifikánsak lesznek az együtthatók.
 
 ```{r}
-arima111 = arima(df$values, order = c(1,1,1))
-coeftest(arima111)
+arima414 = arima(df$values, order = c(4,1,4))
+coeftest(arima414)
 ```
+A bővített modell együtthatói nem különösebben lettek szignifikánsak, így bővíteni a modellt valószínüleg nem érdemes, szűkíteni pedig nem szeretném, mivel az alapmodell együtthatói szignifikánsnak bizonyultak.
+
+Még egy lehetőségem van a modellszelekcóra, mégpedig függvény segítségével. A forecast csomag auto.arima függvényével megnézem, hogy aszerint melyik a legjobban illeszkedő modell.
 
 ```{r, warning=FALSE}
 forecast::auto.arima(df$values)
-arima221 = arima(df$values, order = c(2,2,1))
 ```
 
+Az auto.arima az ARIMA(3,2,3) modellt javasolja, ami annyiban tér el az én modellemtől, hogy még egyszer differenciálva van.
+
 ```{r}
-IC = AIC(arima113,arima111, arima211, arima221)
-IC$BIC = BIC(arima113,arima111, arima211, arima221)[,2]
+arima323 = forecast::auto.arima(df$values)
+coeftest(arima323)
+```
+
+Ebben az esetben minden együttható szignifikáns, feltehetően jobban illeszkedik, mint az ARIMA(3,1,3).
+
+Ideje összehasonlítani az így kapott modelleket, ám érdemes észben tartani, hogy a (3,2,3) paraméterű modell 1-el kevesebb megfigyeléssel rendelkezik a többinél az egyel több differenciálás miatt, ekkor eltérhetnek egyes információs kritériumok oly módon, ami igencsak félrevezető lehet. 
+
+Az információs kritériumok képletei a következők:
+
+-   $AIC = - 2 \times ln(\hat{L}) + 2 \times k$
+-   $BIC = - 2 \times ln(\hat{L}) + 2 \times ln(n) \times k$
+
+Ahol $ln(\hat{L})$ a log-likelihood-ja a modellnek, $k$ a paraméterek száma, $n$ pedig a megfigyelések száma.
+
+Látható, hogy míg az AIC képletében nem szerepel közvetlenül a megfigyelések száma, addig a BIC-ben igen, mégpedig pozitív előjellez, azaz ha csökken a megfigyelések száma, úgy csökken a BIC értéke is.
+
+```{r, warning=FALSE}
+IC = AIC(arima313,arima414, arima323)
+IC$BIC = BIC(arima313,arima414, arima323)[,2]
 kable(IC)
 ```
+
+Annak ellenére, hogy az auto.arima a (3,2,3) modellt javasolta, mind az AIC, mind a BIC szerint a (3,1,3) a jobb, így ezt a modellt tekintem végső ARIMA modellemnek.
 
 ## 6. lépés - Fehérzaj tesztelés
 
 ```{r}
-Box.test(arima111$residuals, type = "Ljung-Box")
+Box.test(arima313$residuals, type = "Ljung-Box")
 ```
 
+
+
 ```{r}
-shapiro.test(arima111$residuals)
+shapiro.test(arima313$residuals)
 ```
+
+
 
 # Arch modell
 
 ```{r}
-hist(arima111$residuals)
+hist(arima313$residuals)
 ```
 
 ```{r}
@@ -147,8 +280,6 @@ acf(df$dValues[-1]^2)
 pacf(df$dValues[-1]^2)
 ```
 
-
 ```{r}
 ArchTest(df$dValues)
 ```
-
