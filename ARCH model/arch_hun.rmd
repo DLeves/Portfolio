@@ -90,7 +90,8 @@ Ezek után az infláció emelkedni kezdett, de még 5% alatt maradva, egészen 2
 
 A makroökonómiában használatos AS-AD görbét alapul véve az energiaárak emelkedése hatalmas sokkot okozhatott a keresleti oldalon. Úgy gondolom, hogy az elszálló inflációnak keresleti oldali okai is vannak, mégpedig a túlfűtött gazdaság, ami a hosszútávú egyensúlyi kibocsátásnál, vagyis a rendelkezésre álló tőke, munka, termelékenység függvényénél nagyobb volt a gazdaság teljesítménye, mivel hatalmas mennyiségű pénzt öntöttek bele, ami növelte a fogyasztást, beruházásokat és a kormányzati költéseket is. A költségvetési hiányban látszódó kormányzati "pénzszórás" (transzferek) 2021-22-ben jelentősen növelte a forgásban lévő pénzmennyiséget és fogyasztást.\
 
-Szintén problémának vélem az energiaár-növekedést pénzpiaci, illetve nemzetközi gazdasági szempontból, mivel a különböző energiahordozókért rendszerint nem forintban törleszti az állam a számlát, hanem más devizában. Ez azt implikálja, hogy amikor nő az energiaár, akkor megnő a kereslet a tegyük fel, hogy az euró felé. Ekkor az állam a forintját eladva eurót vesz, ami csökkenti a forint iránti keresletet az euróval szemben, ami a forint árfolyamát gyengíti. Az [MNB inflációs jelentésében](https://www.mnb.hu/letoltes/hun-ir-digitalis-21.pdf) (78. oldal teteje) szerepel, hogy 1%-nyi árfolyam felértékelődés 0,3%-nyi infláció csökkenést okoz. Ez a hatás a leértékelődésnél is jelen van. Magyarország kis, nyitott gazdaság, sok importált termékkel, a kereskedők nagyon gyorsan tudják az áraikat növelni(hogy megmaradjon a várt profitjuk), az árfolyamnövekedéssel párhuzamosan. Sőt, mivel a gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig nem csökkentik az áraikat. Egy másik, inkább teoretikusabb felvetés az angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb mértékben, mivel a fogyasztók az áremelkedéssel már több helyen találkoztak, így kevesebb ellenállásba, kereslet csökkenésbe ütközik az áremelés a még nagyobb profit érdekében.\
+Szintén problémának vélem az energiaár-növekedést pénzpiaci, illetve nemzetközi gazdasági szempontból, mivel a különböző energiahordozókért rendszerint nem forintban törleszti az állam a számlát, hanem más devizában. Ez azt implikálja, hogy amikor nő az energiaár, akkor megnő a kereslet a tegyük fel, hogy az euró felé. Ekkor az állam a forintját eladva eurót vesz, ami csökkenti a forint iránti keresletet az euróval szemben, ami a forint árfolyamát gyengíti. Az [MNB inflációs jelentésében](https://www.mnb.hu/letoltes/hun-ir-digitalis-21.pdf) (78. oldal teteje) szerepel, hogy 1%-nyi árfolyam felértékelődés 0,3%-nyi infláció csökkenést okoz. Ez a hatás a leértékelődésnél is jelen van. Magyarország kis, nyitott gazdaság, sok importált termékkel, a kereskedők nagyon gyorsan tudják az áraikat növelni(hogy megmaradjon a várt profitjuk), az árfolyamnövekedéssel párhuzamosan. Sőt, mivel a gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig nem csökkentik az áraikat.\ 
+Egy másik, inkább teoretikusabb felvetés az angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb mértékben, mivel a fogyasztók az áremelkedéssel már több helyen találkoztak, így kevesebb ellenállásba, kereslet csökkenésbe ütközik az áremelés a még nagyobb profit érdekében.\
 
 Nézőpontom szerint ez egy komplex probléma, amit a kormány és a jegybank megfelelő kooperációja nagyon magasan képzett szakértői gárdával tudna bizonyos mértékig ellensúlyozni.
 
@@ -168,8 +169,9 @@ pacf(df$dValues[-1])
 
 Nullától szignifikánsan eltérő az első, illetve a 12. és 13. késleltetés. A 12-13. késleltetés valószínűleg a havi adatok miatt egyfajta szezonalitás. Ennek kezelésére lehet úgy differenciálni az idősort, hogy nem az előző adathoz képest nézzük az eltérést, hanem az előző évi azonos adathoz. Ezzel a módszerrel azonban nem 1, hanem még 12, azaz 13 db adat veszik el, amennyiben még a szezonalitásos differenciázás után még differenciázni kell.
 
+Ilyen esetekben SARIMA modelleket szoktak alkalmazni. Ez annyt tesz, hogy Seasonal ARIMA, vagyis szezonális komponensek is vannak az ARIMA modellben, amik nem a $t_{-1}$-hez vannak differenciálva, hanem $t_{-12}$-höz ez esetben, mivel havi gyakoriságú adatokról van szó.
 
-### Szezonalitás korrigálása
+### SARIMA korrelogrammok
 
 ```{r, error=FALSE, warning=FALSE}
 df2 = data.frame(
@@ -180,60 +182,54 @@ df2 = data.frame(
 plot.ts(df2$values)
 ```
 
-Már a grafikonon is látszik, hogy az idősor szórása és átlaga időben nem állandó, ezért mégegyszer differenciálom, ezúttal az előző adathoz képest.
-
 ```{r}
-df2$dvalues = c(NA, diff(df2$values))
-
-plot.ts(diff(df2$values))
-
-adf.test(diff(df2$values))
+acf(df2$values)
+pacf(df2$values)
 ```
 
-Az ADF-teszt szerint mostmár gyengén stacioner az idősor. Visszatérhetek az ACF és PACF vizsgálatához.
+Az ACF egészen a 11-edik késleltetésig szignifikánsan nagyobb nullánál. Ez akár egy elhúzódó AR folyamat is lehet.
 
-```{r}
-acf(df2$dvalues[-1])
-pacf(df2$dvalues[-1])
-```
- 
-Még mindig fenn áll a szezonalitás. Ez az adatok milyensége miatt lehet, mivel eleve az előző év azonos időszakához van viszonyítva az árszínvonal.
-
-Mivel valószínűleg ezt nem tudom megoldani differenciázással, ezért a modellezésnél az eredeti adatokat fogom használni.
+A PACF esetében az első két lag magasan autokorrelált, illetve a 13..
 
 ## 5. lépés - Modellillesztés
 
-Elsőként egy nagyobb modellel kezdenék, egy ARIMA(3,1,3)-al, azaz egyszer differenciált, mind a mozgóátlag, mind az autóregresszív paraméter 3 értékű. Ez azt jelenti, hogy 3 késleltetésig lesznek a modellben mozgóátlag és autoregresszív folyamatok. 
+Elsőként egy nagyobb modellel kezdenék, egy SARIMA(3,1,1)(2,1,2)[12]-vel
 
 ```{r}
-arima313 = arima(df$values, order = c(3,1,3))
-coeftest(arima313)
+sarima311_211 = arima(df$values, order = c(3,1,1), seasonal = list(order = c(2,1,2), period = 12))
+coeftest(sarima311_211)
 ```
 
-Az ar1 paraméteren kívül minden együttható szignifikáns, lehet növelve az AR és MA értékeit szintén szignifikánsak lesznek az együtthatók.
 
 ```{r}
-arima414 = arima(df$values, order = c(4,1,4))
-coeftest(arima414)
+sarima110_212 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(2,1,2), period = 12))
+coeftest(sarima110_212)
 ```
-A bővített modell együtthatói nem különösebben lettek szignifikánsak, így bővíteni a modellt valószínüleg nem érdemes, szűkíteni pedig nem szeretném, mivel az alapmodell együtthatói szignifikánsnak bizonyultak.
+
+```{r}
+sarima110_112 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(1,1,2), period = 12))
+coeftest(sarima110_112)
+```
+
+
+```{r}
+sarima111_112 = arima(df$values, order = c(1,1,1), seasonal = list(order = c(1,1,2), period = 12))
+coeftest(sarima111_112)
+```
 
 Még egy lehetőségem van a modellszelekcóra, mégpedig függvény segítségével. A forecast csomag auto.arima függvényével megnézem, hogy aszerint melyik a legjobban illeszkedő modell.
 
 ```{r, warning=FALSE}
-forecast::auto.arima(df$values)
+ts = ts(df$values, start = c(1997,1), end = c(2023,5), frequency = 12)
+forecast::auto.arima(ts, seasonal = T)
 ```
-
-Az auto.arima az ARIMA(3,2,3) modellt javasolja, ami annyiban tér el az én modellemtől, hogy még egyszer differenciálva van.
 
 ```{r}
-arima323 = forecast::auto.arima(df$values)
-coeftest(arima323)
+autosarima = forecast::auto.arima(ts, seasonal = T)
+coeftest(autosarima)
 ```
 
-Ebben az esetben minden együttható szignifikáns, feltehetően jobban illeszkedik, mint az ARIMA(3,1,3).
-
-Ideje összehasonlítani az így kapott modelleket, ám érdemes észben tartani, hogy a (3,2,3) paraméterű modell 1-el kevesebb megfigyeléssel rendelkezik a többinél az egyel több differenciálás miatt, ekkor eltérhetnek egyes információs kritériumok oly módon, ami igencsak félrevezető lehet. 
+Érdekes módon az auto.arimás
 
 Az információs kritériumok képletei a következők:
 
@@ -242,26 +238,29 @@ Az információs kritériumok képletei a következők:
 
 Ahol $ln(\hat{L})$ a log-likelihood-ja a modellnek, $k$ a paraméterek száma, $n$ pedig a megfigyelések száma.
 
-Látható, hogy míg az AIC képletében nem szerepel közvetlenül a megfigyelések száma, addig a BIC-ben igen, mégpedig pozitív előjellez, azaz ha csökken a megfigyelések száma, úgy csökken a BIC értéke is.
 
 ```{r, warning=FALSE}
-IC = AIC(arima313,arima414, arima323)
-IC$BIC = BIC(arima313,arima414, arima323)[,2]
+IC = AIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)
+IC$BIC = BIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)[,2]
 kable(IC)
 ```
 
-Annak ellenére, hogy az auto.arima a (3,2,3) modellt javasolta, mind az AIC, mind a BIC szerint a (3,1,3) a jobb, így ezt a modellt tekintem végső ARIMA modellemnek.
+
 
 ## 6. lépés - Fehérzaj tesztelés
 
 ```{r}
-Box.test(arima313$residuals, type = "Ljung-Box")
+bgtest(sarima111_112$residuals ~ 1, order = 24)
 ```
 
 
 
 ```{r}
-shapiro.test(arima313$residuals)
+shapiro.test(sarima111_112$residuals)
+```
+
+```{r}
+hist(sarima111_112$residuals)
 ```
 
 
@@ -269,17 +268,13 @@ shapiro.test(arima313$residuals)
 # Arch modell
 
 ```{r}
-hist(arima313$residuals)
+acf(sarima111_112$residuals^2)
+pacf(sarima111_112$residuals^2)
 ```
 
-```{r}
-acf(df$dValues[-1]^2)
-```
 
 ```{r}
-pacf(df$dValues[-1]^2)
+ArchTest(sarima111_112$residuals)
 ```
 
-```{r}
-ArchTest(df$dValues)
-```
+

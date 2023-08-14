@@ -1,7 +1,7 @@
-Untitled
+ARIMA modell ARCH hatások vizsgálatával
 ================
 Dittrich Levente
-2023-08-11
+2023-08-14
 
 - [Kezdeti beállítások](#kezdeti-beállítások)
   - [Használt packagek](#használt-packagek)
@@ -14,7 +14,7 @@ Dittrich Levente
   - [2. lépés - Stacionerré alakítás](#2-lépés---stacionerré-alakítás)
   - [3. lépés - Fehérzaj tesztelése](#3-lépés---fehérzaj-tesztelése)
   - [4. lépés - Korrelogramok](#4-lépés---korrelogramok)
-    - [Szezonalitás korrigálása](#szezonalitás-korrigálása)
+    - [SARIMA korrelogrammok](#sarima-korrelogrammok)
   - [5. lépés - Modellillesztés](#5-lépés---modellillesztés)
   - [6. lépés - Fehérzaj tesztelés](#6-lépés---fehérzaj-tesztelés)
 - [Arch modell](#arch-modell)
@@ -164,7 +164,7 @@ gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is
 feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a
 várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést
 prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig
-nem csökkentik az áraikat. Egy másik, inkább teoretikusabb felvetés az
+nem csökkentik az áraikat.  Egy másik, inkább teoretikusabb felvetés az
 angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak
 lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az
 áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb
@@ -348,7 +348,12 @@ előző évi azonos adathoz. Ezzel a módszerrel azonban nem 1, hanem még
 12, azaz 13 db adat veszik el, amennyiben még a szezonalitásos
 differenciázás után még differenciázni kell.
 
-### Szezonalitás korrigálása
+Ilyen esetekben SARIMA modelleket szoktak alkalmazni. Ez annyt tesz,
+hogy Seasonal ARIMA, vagyis szezonális komponensek is vannak az ARIMA
+modellben, amik nem a $t_{-1}$-hez vannak differenciálva, hanem
+$t_{-12}$-höz ez esetben, mivel havi gyakoriságú adatokról van szó.
+
+### SARIMA korrelogrammok
 
 ``` r
 df2 = data.frame(
@@ -361,178 +366,141 @@ plot.ts(df2$values)
 
 ![](arch_hun_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
-Már a grafikonon is látszik, hogy az idősor szórása és átlaga időben nem
-állandó, ezért mégegyszer differenciálom, ezúttal az előző adathoz
-képest.
-
 ``` r
-df2$dvalues = c(NA, diff(df2$values))
-
-plot.ts(diff(df2$values))
+acf(df2$values)
 ```
 
 ![](arch_hun_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
-adf.test(diff(df2$values))
+pacf(df2$values)
 ```
 
-    ## Augmented Dickey-Fuller Test 
-    ## alternative: stationary 
-    ##  
-    ## Type 1: no drift no trend 
-    ##      lag    ADF p.value
-    ## [1,]   0 -12.27    0.01
-    ## [2,]   1  -9.38    0.01
-    ## [3,]   2  -7.84    0.01
-    ## [4,]   3  -7.22    0.01
-    ## [5,]   4  -6.27    0.01
-    ## [6,]   5  -5.75    0.01
-    ## Type 2: with drift no trend 
-    ##      lag    ADF p.value
-    ## [1,]   0 -12.26    0.01
-    ## [2,]   1  -9.38    0.01
-    ## [3,]   2  -7.84    0.01
-    ## [4,]   3  -7.22    0.01
-    ## [5,]   4  -6.29    0.01
-    ## [6,]   5  -5.75    0.01
-    ## Type 3: with drift and trend 
-    ##      lag    ADF p.value
-    ## [1,]   0 -12.25    0.01
-    ## [2,]   1  -9.36    0.01
-    ## [3,]   2  -7.82    0.01
-    ## [4,]   3  -7.21    0.01
-    ## [5,]   4  -6.21    0.01
-    ## [6,]   5  -5.71    0.01
-    ## ---- 
-    ## Note: in fact, p.value = 0.01 means p.value <= 0.01
+![](arch_hun_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->
 
-Az ADF-teszt szerint mostmár gyengén stacioner az idősor. Visszatérhetek
-az ACF és PACF vizsgálatához.
+Az ACF egészen a 11-edik késleltetésig szignifikánsan nagyobb nullánál.
+Ez akár egy elhúzódó AR folyamat is lehet.
 
-``` r
-acf(df2$dvalues[-1])
-```
-
-![](arch_hun_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
-
-``` r
-pacf(df2$dvalues[-1])
-```
-
-![](arch_hun_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->
-
-Még mindig fenn áll a szezonalitás. Ez az adatok milyensége miatt lehet,
-mivel eleve az előző év azonos időszakához van viszonyítva az
-árszínvonal.
-
-Mivel valószínűleg ezt nem tudom megoldani differenciázással, ezért a
-modellezésnél az eredeti adatokat fogom használni.
+A PACF esetében az első két lag magasan autokorrelált, illetve a 13..
 
 ## 5. lépés - Modellillesztés
 
-Elsőként egy nagyobb modellel kezdenék, egy ARIMA(3,1,3)-al, azaz
-egyszer differenciált, mind a mozgóátlag, mind az autóregresszív
-paraméter 3 értékű. Ez azt jelenti, hogy 3 késleltetésig lesznek a
-modellben mozgóátlag és autoregresszív folyamatok.
+Elsőként egy nagyobb modellel kezdenék, egy
+SARIMA(3,1,1)(2,1,2)\[12\]-vel
 
 ``` r
-arima313 = arima(df$values, order = c(3,1,3))
-coeftest(arima313)
+sarima311_211 = arima(df$values, order = c(3,1,1), seasonal = list(order = c(2,1,2), period = 12))
+coeftest(sarima311_211)
 ```
 
     ## 
     ## z test of coefficients:
     ## 
-    ##      Estimate Std. Error z value  Pr(>|z|)    
-    ## ar1 -0.161708   0.104873 -1.5419  0.123090    
-    ## ar2 -0.197049   0.079634 -2.4744  0.013344 *  
-    ## ar3  0.619510   0.073513  8.4272 < 2.2e-16 ***
-    ## ma1  0.584576   0.123945  4.7164 2.400e-06 ***
-    ## ma2  0.617630   0.117599  5.2520 1.505e-07 ***
-    ## ma3 -0.391672   0.120786 -3.2427  0.001184 ** 
+    ##       Estimate Std. Error  z value  Pr(>|z|)    
+    ## ar1   0.734820   0.440823   1.6669 0.0955287 .  
+    ## ar2   0.012865   0.211052   0.0610 0.9513924    
+    ## ar3   0.059600   0.117106   0.5089 0.6107907    
+    ## ma1  -0.289144   0.440074  -0.6570 0.5111584    
+    ## sar1  0.237782   0.071925   3.3060 0.0009465 ***
+    ## sar2  0.069909   0.073381   0.9527 0.3407479    
+    ## sma1 -1.962156   0.147820 -13.2739 < 2.2e-16 ***
+    ## sma2  0.999877   0.150417   6.6474 2.983e-11 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Az ar1 paraméteren kívül minden együttható szignifikáns, lehet növelve
-az AR és MA értékeit szintén szignifikánsak lesznek az együtthatók.
-
 ``` r
-arima414 = arima(df$values, order = c(4,1,4))
-coeftest(arima414)
+sarima110_212 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(2,1,2), period = 12))
+coeftest(sarima110_212)
 ```
 
     ## 
     ## z test of coefficients:
     ## 
-    ##      Estimate Std. Error z value  Pr(>|z|)    
-    ## ar1 -0.639465   0.369229 -1.7319  0.083293 .  
-    ## ar2 -0.076386   0.251536 -0.3037  0.761372    
-    ## ar3  0.703985   0.109542  6.4266 1.305e-10 ***
-    ## ar4  0.093609   0.246904  0.3791  0.704591    
-    ## ma1  1.071194   0.364828  2.9362  0.003323 ** 
-    ## ma2  0.635400   0.405431  1.5672  0.117063    
-    ## ma3 -0.309517   0.306610 -1.0095  0.312745    
-    ## ma4 -0.166973   0.112266 -1.4873  0.136934    
+    ##       Estimate Std. Error  z value  Pr(>|z|)    
+    ## ar1   0.571877   0.050992  11.2150 < 2.2e-16 ***
+    ## sar1  0.293897   0.072837   4.0350 5.460e-05 ***
+    ## sar2  0.103055   0.074400   1.3852     0.166    
+    ## sma1 -1.959113   0.121656 -16.1037 < 2.2e-16 ***
+    ## sma2  0.999845   0.123942   8.0670 7.204e-16 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-A bővített modell együtthatói nem különösebben lettek szignifikánsak,
-így bővíteni a modellt valószínüleg nem érdemes, szűkíteni pedig nem
-szeretném, mivel az alapmodell együtthatói szignifikánsnak bizonyultak.
+``` r
+sarima110_112 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(1,1,2), period = 12))
+coeftest(sarima110_112)
+```
+
+    ## 
+    ## z test of coefficients:
+    ## 
+    ##       Estimate Std. Error z value  Pr(>|z|)    
+    ## ar1   0.563756   0.052987 10.6394 < 2.2e-16 ***
+    ## sar1  0.095058   0.221240  0.4297  0.667444    
+    ## sma1 -1.624653   0.239653 -6.7792 1.209e-11 ***
+    ## sma2  0.659874   0.253411  2.6040  0.009215 ** 
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+``` r
+sarima111_112 = arima(df$values, order = c(1,1,1), seasonal = list(order = c(1,1,2), period = 12))
+coeftest(sarima111_112)
+```
+
+    ## 
+    ## z test of coefficients:
+    ## 
+    ##       Estimate Std. Error z value  Pr(>|z|)    
+    ## ar1   0.842431   0.053002 15.8942 < 2.2e-16 ***
+    ## ma1  -0.407793   0.085030 -4.7958 1.620e-06 ***
+    ## sar1  0.232411   0.072297  3.2147  0.001306 ** 
+    ## sma1 -1.953156   0.323951 -6.0292 1.648e-09 ***
+    ## sma2  0.991817   0.329922  3.0062  0.002645 ** 
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
 Még egy lehetőségem van a modellszelekcóra, mégpedig függvény
 segítségével. A forecast csomag auto.arima függvényével megnézem, hogy
 aszerint melyik a legjobban illeszkedő modell.
 
 ``` r
-forecast::auto.arima(df$values)
+ts = ts(df$values, start = c(1997,1), end = c(2023,5), frequency = 12)
+forecast::auto.arima(ts, seasonal = T)
 ```
 
     ## Registered S3 method overwritten by 'quantmod':
     ##   method            from
     ##   as.zoo.data.frame zoo
 
-    ## Series: df$values 
-    ## ARIMA(3,2,3) 
+    ## Series: ts 
+    ## ARIMA(1,2,2)(1,0,2)[12] 
     ## 
     ## Coefficients:
-    ##           ar1      ar2     ar3     ma1      ma2      ma3
-    ##       -0.7776  -0.3133  0.4917  0.2284  -0.2595  -0.9229
-    ## s.e.   0.0674   0.0753  0.0556  0.0541   0.0466   0.0305
+    ##          ar1      ma1     ma2    sar1     sma1     sma2
+    ##       0.7405  -1.3019  0.3251  0.0056  -0.6926  -0.0612
+    ## s.e.  0.0958   0.1177  0.1069  0.5944   0.5928   0.4394
     ## 
-    ## sigma^2 = 0.3282:  log likelihood = -270.18
-    ## AIC=554.36   AICc=554.73   BIC=580.63
-
-Az auto.arima az ARIMA(3,2,3) modellt javasolja, ami annyiban tér el az
-én modellemtől, hogy még egyszer differenciálva van.
+    ## sigma^2 = 0.2509:  log likelihood = -232.15
+    ## AIC=478.29   AICc=478.66   BIC=504.56
 
 ``` r
-arima323 = forecast::auto.arima(df$values)
-coeftest(arima323)
+autosarima = forecast::auto.arima(ts, seasonal = T)
+coeftest(autosarima)
 ```
 
     ## 
     ## z test of coefficients:
     ## 
-    ##      Estimate Std. Error  z value  Pr(>|z|)    
-    ## ar1 -0.777561   0.067394 -11.5376 < 2.2e-16 ***
-    ## ar2 -0.313270   0.075268  -4.1621 3.154e-05 ***
-    ## ar3  0.491678   0.055644   8.8361 < 2.2e-16 ***
-    ## ma1  0.228416   0.054128   4.2199 2.444e-05 ***
-    ## ma2 -0.259500   0.046591  -5.5697 2.551e-08 ***
-    ## ma3 -0.922924   0.030496 -30.2635 < 2.2e-16 ***
+    ##        Estimate Std. Error  z value  Pr(>|z|)    
+    ## ar1   0.7405260  0.0958223   7.7281 1.091e-14 ***
+    ## ma1  -1.3019349  0.1177215 -11.0594 < 2.2e-16 ***
+    ## ma2   0.3251233  0.1069429   3.0402  0.002365 ** 
+    ## sar1  0.0055917  0.5944184   0.0094  0.992494    
+    ## sma1 -0.6925649  0.5928341  -1.1682  0.242715    
+    ## sma2 -0.0611981  0.4393896  -0.1393  0.889229    
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Ebben az esetben minden együttható szignifikáns, feltehetően jobban
-illeszkedik, mint az ARIMA(3,1,3).
-
-Ideje összehasonlítani az így kapott modelleket, ám érdemes észben
-tartani, hogy a (3,2,3) paraméterű modell 1-el kevesebb megfigyeléssel
-rendelkezik a többinél az egyel több differenciálás miatt, ekkor
-eltérhetnek egyes információs kritériumok oly módon, ami igencsak
-félrevezető lehet.
+Érdekes módon az auto.arimás
 
 Az információs kritériumok képletei a következők:
 
@@ -542,74 +510,68 @@ Az információs kritériumok képletei a következők:
 Ahol $ln(\hat{L})$ a log-likelihood-ja a modellnek, $k$ a paraméterek
 száma, $n$ pedig a megfigyelések száma.
 
-Látható, hogy míg az AIC képletében nem szerepel közvetlenül a
-megfigyelések száma, addig a BIC-ben igen, mégpedig pozitív előjellez,
-azaz ha csökken a megfigyelések száma, úgy csökken a BIC értéke is.
-
 ``` r
-IC = AIC(arima313,arima414, arima323)
-IC$BIC = BIC(arima313,arima414, arima323)[,2]
+IC = AIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)
+IC$BIC = BIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)[,2]
 kable(IC)
 ```
 
-|          |  df |      AIC |      BIC |
-|:---------|----:|---------:|---------:|
-| arima313 |   7 | 545.5849 | 571.8751 |
-| arima414 |   9 | 552.8951 | 586.6967 |
-| arima323 |   7 | 554.3634 | 580.6314 |
-
-Annak ellenére, hogy az auto.arima a (3,2,3) modellt javasolta, mind az
-AIC, mind a BIC szerint a (3,1,3) a jobb, így ezt a modellt tekintem
-végső ARIMA modellemnek.
+|               |  df |      AIC |      BIC |
+|:--------------|----:|---------:|---------:|
+| sarima311_211 |   9 | 521.7521 | 555.2053 |
+| sarima110_212 |   6 | 531.1247 | 553.4268 |
+| sarima110_112 |   5 | 534.9593 | 553.5444 |
+| sarima111_112 |   6 | 516.9746 | 539.2767 |
+| autosarima    |   7 | 478.2913 | 504.5593 |
 
 ## 6. lépés - Fehérzaj tesztelés
 
 ``` r
-Box.test(arima313$residuals, type = "Ljung-Box")
+bgtest(sarima111_112$residuals ~ 1, order = 24)
 ```
 
     ## 
-    ##  Box-Ljung test
+    ##  Breusch-Godfrey test for serial correlation of order up to 24
     ## 
-    ## data:  arima313$residuals
-    ## X-squared = 0.026344, df = 1, p-value = 0.8711
+    ## data:  sarima111_112$residuals ~ 1
+    ## LM test = 13.263, df = 24, p-value = 0.9616
 
 ``` r
-shapiro.test(arima313$residuals)
+shapiro.test(sarima111_112$residuals)
 ```
 
     ## 
     ##  Shapiro-Wilk normality test
     ## 
-    ## data:  arima313$residuals
-    ## W = 0.97587, p-value = 3.62e-05
-
-# Arch modell
+    ## data:  sarima111_112$residuals
+    ## W = 0.96702, p-value = 1.279e-06
 
 ``` r
-hist(arima313$residuals)
-```
-
-![](arch_hun_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
-
-``` r
-acf(df$dValues[-1]^2)
+hist(sarima111_112$residuals)
 ```
 
 ![](arch_hun_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
+# Arch modell
+
 ``` r
-pacf(df$dValues[-1]^2)
+acf(sarima111_112$residuals^2)
 ```
 
 ![](arch_hun_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ``` r
-ArchTest(df$dValues)
+pacf(sarima111_112$residuals^2)
+```
+
+![](arch_hun_files/figure-gfm/unnamed-chunk-25-2.png)<!-- -->
+
+``` r
+ArchTest(sarima111_112$residuals)
 ```
 
     ## 
     ##  ARCH LM-test; Null hypothesis: no ARCH effects
     ## 
-    ## data:  df$dValues
-    ## Chi-squared = 75.722, df = 12, p-value = 2.683e-11
+    ## data:  sarima111_112$residuals
+    ## Chi-squared = 19.021, df = 12, p-value = 0.08802
