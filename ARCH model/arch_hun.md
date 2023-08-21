@@ -1,7 +1,7 @@
-ARIMA modell ARCH hatások vizsgálatával
+SARIMA modell ARCH hatások vizsgálatával
 ================
 Dittrich Levente
-2023-08-14
+2023-08-21
 
 - [Kezdeti beállítások](#kezdeti-beállítások)
   - [Használt packagek](#használt-packagek)
@@ -16,8 +16,9 @@ Dittrich Levente
   - [4. lépés - Korrelogramok](#4-lépés---korrelogramok)
     - [SARIMA korrelogrammok](#sarima-korrelogrammok)
   - [5. lépés - Modellillesztés](#5-lépés---modellillesztés)
-  - [6. lépés - Fehérzaj tesztelés](#6-lépés---fehérzaj-tesztelés)
+  - [6. lépés - Modell tesztelése](#6-lépés---modell-tesztelése)
 - [Arch modell](#arch-modell)
+- [Előrejelzés a modellel](#előrejelzés-a-modellel)
 
 Portfolióm ezen fejezetében a magyar inflációra építek ARIMA modellt,
 illetve amennyiben a szórása nem állandó az idősornak, akkor GARCH
@@ -63,12 +64,12 @@ kable(head(euInf))
 
 | unit  | coicop | geo | time       | values |
 |:------|:-------|:----|:-----------|-------:|
-| RCH_A | CP00   | AT  | 2023-07-01 |    7.0 |
-| RCH_A | CP00   | BE  | 2023-07-01 |    1.6 |
-| RCH_A | CP00   | CY  | 2023-07-01 |    2.4 |
-| RCH_A | CP00   | DE  | 2023-07-01 |    6.5 |
-| RCH_A | CP00   | EA  | 2023-07-01 |    5.3 |
-| RCH_A | CP00   | EE  | 2023-07-01 |    6.3 |
+| RCH_A | AP     | AT  | 2023-07-01 |    5.3 |
+| RCH_A | AP     | BE  | 2023-07-01 |    5.5 |
+| RCH_A | AP     | BG  | 2023-07-01 |    7.7 |
+| RCH_A | AP     | CH  | 2023-07-01 |    2.6 |
+| RCH_A | AP     | CY  | 2023-07-01 |    0.0 |
+| RCH_A | AP     | CZ  | 2023-07-01 |   20.8 |
 
 A következők az oszlopok az adattáblában:
 
@@ -408,6 +409,10 @@ coeftest(sarima311_211)
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
+Az AR folyamatok közül kizárólag az első szignifikáns, ahogyan a SAR
+esetében is. Az MA nem szignifikáns, viszont mindkét SMA az. Érdemes
+lehetne a SARIMA(1,1,0)(2,1,2)\[12\] modell koefficienseit megnézni.
+
 ``` r
 sarima110_212 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(2,1,2), period = 12))
 coeftest(sarima110_212)
@@ -425,6 +430,9 @@ coeftest(sarima110_212)
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
+A SAR második késleltetése nem szignifikáns még így sem, ezt kiveszem a
+modellből.
+
 ``` r
 sarima110_112 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(1,1,2), period = 12))
 coeftest(sarima110_112)
@@ -440,6 +448,10 @@ coeftest(sarima110_112)
     ## sma2  0.659874   0.253411  2.6040  0.009215 ** 
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Ekkor a SAR1 sem lesz szignifikáns, különös. Megpróbálom visszatenni a
+modellbe az MA(1) tagot, hátha egy mozgóátlag miatt nem szingifikáns a
+SAR1.
 
 ``` r
 sarima111_112 = arima(df$values, order = c(1,1,1), seasonal = list(order = c(1,1,2), period = 12))
@@ -458,18 +470,27 @@ coeftest(sarima111_112)
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
+Minden változó szingifikáns lett 1%-on. Ezt tekintem az általam elért
+legjobb modellnek.
+
 Még egy lehetőségem van a modellszelekcóra, mégpedig függvény
 segítségével. A forecast csomag auto.arima függvényével megnézem, hogy
-aszerint melyik a legjobban illeszkedő modell.
+aszerint melyik a legjobban illeszkedő modell. Ehhez először
+`Time-Series` típússá kell alakítanom az adatsort, majd futtatni az
+`auto.arima()` függvényt.
 
 ``` r
 ts = ts(df$values, start = c(1997,1), end = c(2023,5), frequency = 12)
-forecast::auto.arima(ts, seasonal = T)
+autosarima = forecast::auto.arima(ts, seasonal = T)
 ```
 
     ## Registered S3 method overwritten by 'quantmod':
     ##   method            from
     ##   as.zoo.data.frame zoo
+
+``` r
+autosarima
+```
 
     ## Series: ts 
     ## ARIMA(1,2,2)(1,0,2)[12] 
@@ -483,7 +504,6 @@ forecast::auto.arima(ts, seasonal = T)
     ## AIC=478.29   AICc=478.66   BIC=504.56
 
 ``` r
-autosarima = forecast::auto.arima(ts, seasonal = T)
 coeftest(autosarima)
 ```
 
@@ -500,7 +520,16 @@ coeftest(autosarima)
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Érdekes módon az auto.arimás
+Érdekes módon az auto.arimás modell nem differenciál a szezonalitással,
+viszont a SAR és SMA argumentumok az enyémmel azonosak. A sima ARIMA
+részében érdekes módon kétszer differenciál, ami nem feltétlenül
+indokolt, mivel egy differenciázás hatására is stacioner lesz az idősor.
+Az AR rész megegyezik az én végső modellemével, viszont az MA rész
+paramétere 2, amit viszont ha beleépítenék az én modellembe, akkor az
+már nem lenne szignifikáns magyarázó változó.
+
+Ideje megnézni az információs kritériumokat és az alapjám
+összehasonlítani a modelleket:
 
 Az információs kritériumok képletei a következők:
 
@@ -524,7 +553,19 @@ kable(IC)
 | sarima111_112 |   6 | 516.9746 | 539.2767 |
 | autosarima    |   7 | 478.2913 | 504.5593 |
 
-## 6. lépés - Fehérzaj tesztelés
+Az autosarima nevű modellt figyelmen kívül hagyva a legjobb modell az
+AIC és BIC szerint is az utolsó modellem, a SARIMA(1,1,1)(1,1,2)\[12\].
+
+Az autosarima modell minden más modellnél jobb IC-okkal rendelkezik,
+azonban a SAR és SMA együtthatói nem szignifikánsak. Mivel ez egy
+algoritmus által alapból AICc optimalizálásra konfigurált modell, ezért
+nem ezt tekintem végső modellemnek, hanem az általam készített
+SARIMA(1,1,1)(1,1,2)\[12\]-t.
+
+## 6. lépés - Modell tesztelése
+
+A modell jóságának vizsgálatára megnézem, hogy a hibatagjai
+fehérzajok-e. Erre a már korábban használt BG-tesztet fogom alkalmazni.
 
 ``` r
 bgtest(sarima111_112$residuals ~ 1, order = 24)
@@ -536,6 +577,13 @@ bgtest(sarima111_112$residuals ~ 1, order = 24)
     ## data:  sarima111_112$residuals ~ 1
     ## LM test = 13.263, df = 24, p-value = 0.9616
 
+Nagyon magas a p-érték, H0-t elfogadjuk, a modell hibatagjai fehérzajnak
+tekinthetők.
+
+Érdemes lehet megnézni a hibatagok eloszlását is, erre egy Shapiro-Wilk
+tesztet fogog végezni. A teszt nullhipotézise azt mondja ki, hogy a
+hibatagok normális eloszlásúak.
+
 ``` r
 shapiro.test(sarima111_112$residuals)
 ```
@@ -546,25 +594,78 @@ shapiro.test(sarima111_112$residuals)
     ## data:  sarima111_112$residuals
     ## W = 0.96702, p-value = 1.279e-06
 
+A p-érték nagyon alacsony, H0 elvethető, nem normális eloszlásúak a
+hibatagok.
+
 ``` r
 hist(sarima111_112$residuals)
 ```
 
-![](arch_hun_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](arch_hun_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
+A hibatagok eloszlása csúcsosabbank tűnik a normális eloszlásnál,
+valamit enyhén jobbra elnyúló is.
 
 # Arch modell
+
+A végső modellemet megfelelőnek találtam, na hibatag fehérzaj volt.
+Azonban meg szeretném nézni azt, hogy vannak-e benne még ARCH/GARCH
+hatások. Az ARCH mozaikszó azt jelenti, hogy Autoregressive Conditional
+Heteroskedasticity. Az ARCH/GARCH modellekben a hibatagok szórása nem
+állandó, hanem a múltbeli értéke hatással van rá.
+
+Az ARIMA(p,q) modell éltalénos egyenlete a következő:
+
+$Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + u_{t}$
+
+A SARIMA(p,q)\[P,Q\]m modell általános egyenlete:
+
+$Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + \sum_{k=1}^{P} \Phi_{j} Y_{t-k \times m} + \sum_{l=1}^{Q} \Theta_{l} u_{t-l \times m} + u_{t}$
+
+Az előbbi két modell esetében feltételezve van az $u_{t} \sim N(0,1)$.
+Az ARCH/GARCH modelleknél $u_{t} \sim N(0,\sigma_{t})$, innentől
+kettéválik az ARCH és a GARCH. Az ARCH modellben $\sigma^{2}_{t}$ csak a
+hibatag múltjától függ ($u_{t-i}$ négyzetes értékeitől), míg a GARCH
+modellben $\sigma^{2}_{t}$ ezek mellett a saját múltbeli értékeitől is
+függ. Ez olyan, mintha az ARCH modellben a $\sigma^{2}_{t}$ MA folyamata
+lenne, míg a GARCH modellben $\sigma^{2}_{t}$ AR és MA folyamata is
+szerepelne.
+
+Az ARCH(q) modell általános egyenlete:
+
+$\sigma^{2}_{t} = \omega + \sum_{i=1}^{q} \alpha_{i} u_{t}^{2}$
+
+A GARCH(p,q) modell általános egyenlete a következő:
+
+$\sigma^{2}_{t} = \omega + \sum_{i=1}^{q} \alpha_{i} u_{t}^{2} + \sum_{j=1}^{p} \beta_{j} \sigma^{2}_{t-j}$
+
+Ezen felül rengeteg GARCH interpetáció létezik, főleg a $\sigma^{2}_{t}$
+egyenlet második felének felírására. Ezek általában valami nagyon
+specifikus adathalmazra vannak kiszámítva és ott használatosak, pl.
+EGARCH-ot a pénzügyi idősorokon használnak, hogy pozitív és negatív
+eszközmegtérülés közotti asszimetriát tudja kezelni a modell.
+
+Az ARCH hatások jelenlétének gyors vizsgálatához a maradéktagok
+négyzetének ACF és PACF görbéit érdemes szemügyre venni. Ezt a technikát
+a sima keresztmetszeti modelleknél is lehet alkalmazni.
 
 ``` r
 acf(sarima111_112$residuals^2)
 ```
 
-![](arch_hun_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](arch_hun_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ``` r
 pacf(sarima111_112$residuals^2)
 ```
 
-![](arch_hun_files/figure-gfm/unnamed-chunk-25-2.png)<!-- -->
+![](arch_hun_files/figure-gfm/unnamed-chunk-24-2.png)<!-- -->
+
+Mind az ACF, mind a PACF esetében a 9. lag láthatóan nem nulla, ez ARCH
+hatásra adhat okot.
+
+Az ARCH hatás vizsgálatára van ARCH teszt is, melynek nullhipotézise azt
+állítja, hogy vannak ARCH hatások az idősorban.
 
 ``` r
 ArchTest(sarima111_112$residuals)
@@ -575,3 +676,15 @@ ArchTest(sarima111_112$residuals)
     ## 
     ## data:  sarima111_112$residuals
     ## Chi-squared = 19.021, df = 12, p-value = 0.08802
+
+A teszt p-értéke 8,8%, ami azt jelenti, hogy 10%-os szignifikancia szint
+mellett el lehetne fogadni a nullhipotézist, azonban 5%-on már nem.
+Mivel nem gondolom a 10%-os szignifikanciasztintet elég megbízhatónak,
+ezért nullhipotézist 5%-os szignifikanci szint mellett elutasítom. A
+végső SARIMA modellben nincsen ARCH hatás.
+
+# Előrejelzés a modellel
+
+Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg autgusztus
+van, ezért meg tudom nézni, hogy a modellem milyen jól jelzi előre a
+júniusi és júliusi inflációt.

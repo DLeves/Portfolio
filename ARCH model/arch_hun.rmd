@@ -1,5 +1,5 @@
 ---
-title: "ARIMA modell ARCH hatások vizsgálatával"
+title: "SARIMA modell ARCH hatások vizsgálatával"
 author: "Dittrich Levente"
 date: "`r Sys.Date()`"
 output: 
@@ -67,9 +67,8 @@ df = df %>%
   arrange(time)
 ```
 
-
 ```{r, include=FALSE}
-rm(euInf)
+# rm(euInf)
 ```
 
 # Adatvizualizáció
@@ -90,8 +89,7 @@ Ezek után az infláció emelkedni kezdett, de még 5% alatt maradva, egészen 2
 
 A makroökonómiában használatos AS-AD görbét alapul véve az energiaárak emelkedése hatalmas sokkot okozhatott a keresleti oldalon. Úgy gondolom, hogy az elszálló inflációnak keresleti oldali okai is vannak, mégpedig a túlfűtött gazdaság, ami a hosszútávú egyensúlyi kibocsátásnál, vagyis a rendelkezésre álló tőke, munka, termelékenység függvényénél nagyobb volt a gazdaság teljesítménye, mivel hatalmas mennyiségű pénzt öntöttek bele, ami növelte a fogyasztást, beruházásokat és a kormányzati költéseket is. A költségvetési hiányban látszódó kormányzati "pénzszórás" (transzferek) 2021-22-ben jelentősen növelte a forgásban lévő pénzmennyiséget és fogyasztást.\
 
-Szintén problémának vélem az energiaár-növekedést pénzpiaci, illetve nemzetközi gazdasági szempontból, mivel a különböző energiahordozókért rendszerint nem forintban törleszti az állam a számlát, hanem más devizában. Ez azt implikálja, hogy amikor nő az energiaár, akkor megnő a kereslet a tegyük fel, hogy az euró felé. Ekkor az állam a forintját eladva eurót vesz, ami csökkenti a forint iránti keresletet az euróval szemben, ami a forint árfolyamát gyengíti. Az [MNB inflációs jelentésében](https://www.mnb.hu/letoltes/hun-ir-digitalis-21.pdf) (78. oldal teteje) szerepel, hogy 1%-nyi árfolyam felértékelődés 0,3%-nyi infláció csökkenést okoz. Ez a hatás a leértékelődésnél is jelen van. Magyarország kis, nyitott gazdaság, sok importált termékkel, a kereskedők nagyon gyorsan tudják az áraikat növelni(hogy megmaradjon a várt profitjuk), az árfolyamnövekedéssel párhuzamosan. Sőt, mivel a gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig nem csökkentik az áraikat.\ 
-Egy másik, inkább teoretikusabb felvetés az angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb mértékben, mivel a fogyasztók az áremelkedéssel már több helyen találkoztak, így kevesebb ellenállásba, kereslet csökkenésbe ütközik az áremelés a még nagyobb profit érdekében.\
+Szintén problémának vélem az energiaár-növekedést pénzpiaci, illetve nemzetközi gazdasági szempontból, mivel a különböző energiahordozókért rendszerint nem forintban törleszti az állam a számlát, hanem más devizában. Ez azt implikálja, hogy amikor nő az energiaár, akkor megnő a kereslet a tegyük fel, hogy az euró felé. Ekkor az állam a forintját eladva eurót vesz, ami csökkenti a forint iránti keresletet az euróval szemben, ami a forint árfolyamát gyengíti. Az [MNB inflációs jelentésében](https://www.mnb.hu/letoltes/hun-ir-digitalis-21.pdf) (78. oldal teteje) szerepel, hogy 1%-nyi árfolyam felértékelődés 0,3%-nyi infláció csökkenést okoz. Ez a hatás a leértékelődésnél is jelen van. Magyarország kis, nyitott gazdaság, sok importált termékkel, a kereskedők nagyon gyorsan tudják az áraikat növelni(hogy megmaradjon a várt profitjuk), az árfolyamnövekedéssel párhuzamosan. Sőt, mivel a gazdaságban ilyen időkben nagyobb a bizonytalanság, így az árakat nem is feltétlenül pontosan az árfolyam változásával arányosan emelik, hanem a várakozásaiknak megfelelően, ami sokszor még nagyobb leértékelődést prognosztizál és egy esetleges euró/forint árfolyam erősödésnél pedig nem csökkentik az áraikat.  Egy másik, inkább teoretikusabb felvetés az angol *greedflation* szóösszetétel, ami magyarul kapzsisági inflációnak lehetne hívni. Ez abban nyílvánul meg, hogy egyes szereplők növelik az áraikat, annak ellenére, hogy költségeik nem nőttek, vagy kisebb mértékben, mivel a fogyasztók az áremelkedéssel már több helyen találkoztak, így kevesebb ellenállásba, kereslet csökkenésbe ütközik az áremelés a még nagyobb profit érdekében.\
 
 Nézőpontom szerint ez egy komplex probléma, amit a kormány és a jegybank megfelelő kooperációja nagyon magasan képzett szakértői gárdával tudna bizonyos mértékig ellensúlyozni.
 
@@ -110,13 +108,11 @@ Az ADF teszt hipotézisei:
 
 A teszt nem csak egyféle módon végzi a tesztet, random-walkkal, valamint random walkkal és trenddel is megnézi a stacionaritást.
 
-
 ```{r}
 adf.test(df$values)
 ```
 
 Nagyon magasak a p-értékek, az idősor biztosan nem stacioner, egyik esetben sem.
-
 
 ## 2. lépés - Stacionerré alakítás
 
@@ -125,7 +121,7 @@ df$dValues = c(NA, diff(df$values))
 adf.test(df$dValues)
 ```
 
-A stacionaritás elérése érdekében differenciáztam az idősort. A differenciált idősor esetében minden esetben el lehet utasítani a nullhipotézist, vagyis nincsen egységgyök a modellben, stacioner viselkedésű. 
+A stacionaritás elérése érdekében differenciáztam az idősort. A differenciált idősor esetében minden esetben el lehet utasítani a nullhipotézist, vagyis nincsen egységgyök a modellben, stacioner viselkedésű.
 
 A differenciált idősor ábrázolva így néz ki:
 
@@ -200,36 +196,41 @@ sarima311_211 = arima(df$values, order = c(3,1,1), seasonal = list(order = c(2,1
 coeftest(sarima311_211)
 ```
 
+Az AR folyamatok közül kizárólag az első szignifikáns, ahogyan a SAR esetében is. Az MA nem szignifikáns, viszont mindkét SMA az. Érdemes lehetne a SARIMA(1,1,0)(2,1,2)[12] modell koefficienseit megnézni.
 
 ```{r}
 sarima110_212 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(2,1,2), period = 12))
 coeftest(sarima110_212)
 ```
 
+A SAR második késleltetése nem szignifikáns még így sem, ezt kiveszem a modellből.
+
 ```{r}
 sarima110_112 = arima(df$values, order = c(1,1,0), seasonal = list(order = c(1,1,2), period = 12))
 coeftest(sarima110_112)
 ```
 
+Ekkor a SAR1 sem lesz szignifikáns, különös. Megpróbálom visszatenni a modellbe az MA(1) tagot, hátha egy mozgóátlag miatt nem szingifikáns a SAR1.
 
 ```{r}
 sarima111_112 = arima(df$values, order = c(1,1,1), seasonal = list(order = c(1,1,2), period = 12))
 coeftest(sarima111_112)
 ```
 
-Még egy lehetőségem van a modellszelekcóra, mégpedig függvény segítségével. A forecast csomag auto.arima függvényével megnézem, hogy aszerint melyik a legjobban illeszkedő modell.
+Minden változó szingifikáns lett 1%-on. Ezt tekintem az általam elért legjobb modellnek.
+
+Még egy lehetőségem van a modellszelekcóra, mégpedig függvény segítségével. A forecast csomag auto.arima függvényével megnézem, hogy aszerint melyik a legjobban illeszkedő modell. Ehhez először `Time-Series` típússá kell alakítanom az adatsort, majd futtatni az `auto.arima()` függvényt.
 
 ```{r, warning=FALSE}
 ts = ts(df$values, start = c(1997,1), end = c(2023,5), frequency = 12)
-forecast::auto.arima(ts, seasonal = T)
-```
-
-```{r}
 autosarima = forecast::auto.arima(ts, seasonal = T)
+autosarima
 coeftest(autosarima)
 ```
 
-Érdekes módon az auto.arimás
+Érdekes módon az auto.arimás modell nem differenciál a szezonalitással, viszont a SAR és SMA argumentumok az enyémmel azonosak. A sima ARIMA részében érdekes módon kétszer differenciál, ami nem feltétlenül indokolt, mivel egy differenciázás hatására is stacioner lesz az idősor. Az AR rész megegyezik az én végső modellemével, viszont az MA rész paramétere 2, amit viszont ha beleépítenék az én modellembe, akkor az már nem lenne szignifikáns magyarázó változó.
+
+Ideje megnézni az információs kritériumokat és az alapjám összehasonlítani a modelleket:
 
 Az információs kritériumok képletei a következők:
 
@@ -238,43 +239,87 @@ Az információs kritériumok képletei a következők:
 
 Ahol $ln(\hat{L})$ a log-likelihood-ja a modellnek, $k$ a paraméterek száma, $n$ pedig a megfigyelések száma.
 
-
 ```{r, warning=FALSE}
 IC = AIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)
 IC$BIC = BIC(sarima311_211,sarima110_212,sarima110_112,sarima111_112,autosarima)[,2]
 kable(IC)
 ```
 
+Az autosarima nevű modellt figyelmen kívül hagyva a legjobb modell az AIC és BIC szerint is az utolsó modellem, a SARIMA(1,1,1)(1,1,2)[12].
 
+Az autosarima modell minden más modellnél jobb IC-okkal rendelkezik, azonban a SAR és SMA együtthatói nem szignifikánsak. Mivel ez egy algoritmus által alapból AICc optimalizálásra konfigurált modell, ezért nem ezt tekintem végső modellemnek, hanem az általam készített SARIMA(1,1,1)(1,1,2)[12]-t.
 
-## 6. lépés - Fehérzaj tesztelés
+## 6. lépés - Modell tesztelése
+
+A modell jóságának vizsgálatára megnézem, hogy a hibatagjai fehérzajok-e. Erre a már korábban használt BG-tesztet fogom alkalmazni.
 
 ```{r}
 bgtest(sarima111_112$residuals ~ 1, order = 24)
 ```
 
+Nagyon magas a p-érték, H0-t elfogadjuk, a modell hibatagjai fehérzajnak tekinthetők.
 
+Érdemes lehet megnézni a hibatagok eloszlását is, erre egy Shapiro-Wilk tesztet fogog végezni. A teszt nullhipotézise azt mondja ki, hogy a hibatagok normális eloszlásúak.
 
 ```{r}
 shapiro.test(sarima111_112$residuals)
 ```
 
+A p-érték nagyon alacsony, H0 elvethető, nem normális eloszlásúak a hibatagok.
+
 ```{r}
 hist(sarima111_112$residuals)
 ```
 
-
+A hibatagok eloszlása csúcsosabbank tűnik a normális eloszlásnál, valamit enyhén jobbra elnyúló is.
 
 # Arch modell
+
+A végső modellemet megfelelőnek találtam, na hibatag fehérzaj volt. Azonban meg szeretném nézni azt, hogy vannak-e benne még ARCH/GARCH hatások. Az ARCH mozaikszó azt jelenti, hogy Autoregressive Conditional Heteroskedasticity. Az ARCH/GARCH modellekben a hibatagok szórása nem állandó, hanem a múltbeli értéke hatással van rá.
+
+Az ARIMA(p,q) modell éltalénos egyenlete a következő:
+
+$Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + u_{t}$
+
+
+A SARIMA(p,q)[P,Q]m modell általános egyenlete:
+
+$Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + \sum_{k=1}^{P} \Phi_{j} Y_{t-k \times m} + \sum_{l=1}^{Q} \Theta_{l} u_{t-l \times m} + u_{t}$
+
+Az előbbi két modell esetében feltételezve van az $u_{t} \sim N(0,1)$. Az ARCH/GARCH modelleknél $u_{t} \sim N(0,\sigma_{t})$, innentől kettéválik az ARCH és a GARCH. Az ARCH modellben $\sigma^{2}_{t}$ csak a hibatag múltjától függ ($u_{t-i}$ négyzetes értékeitől), míg a GARCH modellben $\sigma^{2}_{t}$ ezek mellett a saját múltbeli értékeitől is függ. Ez olyan, mintha az ARCH modellben a $\sigma^{2}_{t}$ MA folyamata lenne, míg a GARCH modellben $\sigma^{2}_{t}$ AR és MA folyamata is szerepelne.
+
+Az ARCH(q) modell általános egyenlete:
+
+$\sigma^{2}_{t} = \omega + \sum_{i=1}^{q} \alpha_{i} u_{t}^{2}$
+
+A GARCH(p,q) modell általános egyenlete a következő:
+
+$\sigma^{2}_{t} = \omega + \sum_{i=1}^{q} \alpha_{i} u_{t}^{2} + \sum_{j=1}^{p} \beta_{j} \sigma^{2}_{t-j}$
+
+Ezen felül rengeteg GARCH interpetáció létezik, főleg a $\sigma^{2}_{t}$ egyenlet második felének felírására. Ezek általában valami nagyon specifikus adathalmazra vannak kiszámítva és ott használatosak, pl. EGARCH-ot a pénzügyi idősorokon használnak, hogy pozitív és negatív eszközmegtérülés közotti asszimetriát tudja kezelni a modell.
+
+Az ARCH hatások jelenlétének gyors vizsgálatához a maradéktagok négyzetének ACF és PACF görbéit érdemes szemügyre venni. Ezt a technikát a sima keresztmetszeti modelleknél is lehet alkalmazni.
 
 ```{r}
 acf(sarima111_112$residuals^2)
 pacf(sarima111_112$residuals^2)
 ```
 
+Mind az ACF, mind a PACF esetében a 9. lag láthatóan nem nulla, ez ARCH hatásra adhat okot.
+
+Az ARCH hatás vizsgálatára van ARCH teszt is, melynek nullhipotézise azt állítja, hogy vannak ARCH hatások az idősorban.
 
 ```{r}
 ArchTest(sarima111_112$residuals)
 ```
 
+A teszt p-értéke 8,8%, ami azt jelenti, hogy 10%-os szignifikancia szint mellett el lehetne fogadni a nullhipotézist, azonban 5%-on már nem. Mivel nem gondolom a 10%-os szignifikanciasztintet elég megbízhatónak, ezért nullhipotézist 5%-os szignifikanci szint mellett elutasítom. A végső SARIMA modellben nincsen ARCH hatás.
+
+# Előrejelzés a modellel
+
+Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg autgusztus van, ezért meg tudom nézni, hogy a modellem milyen jól jelzi előre a júniusi és júliusi inflációt.
+
+```{r}
+
+```
 
