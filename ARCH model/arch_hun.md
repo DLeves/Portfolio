@@ -49,6 +49,7 @@ library(tidyverse)
 library(aTSA)
 library(lmtest)
 library(FinTS)
+library(forecast)
 ```
 
 ## Adatok lekérése
@@ -398,14 +399,14 @@ coeftest(sarima311_211)
     ## z test of coefficients:
     ## 
     ##       Estimate Std. Error  z value  Pr(>|z|)    
-    ## ar1   0.734820   0.440823   1.6669 0.0955287 .  
-    ## ar2   0.012865   0.211052   0.0610 0.9513924    
-    ## ar3   0.059600   0.117106   0.5089 0.6107907    
-    ## ma1  -0.289144   0.440074  -0.6570 0.5111584    
-    ## sar1  0.237782   0.071925   3.3060 0.0009465 ***
-    ## sar2  0.069909   0.073381   0.9527 0.3407479    
-    ## sma1 -1.962156   0.147820 -13.2739 < 2.2e-16 ***
-    ## sma2  0.999877   0.150417   6.6474 2.983e-11 ***
+    ## ar1   0.734921   0.453447   1.6207 0.1050723    
+    ## ar2   0.012835   0.215664   0.0595 0.9525445    
+    ## ar3   0.059566   0.120176   0.4957 0.6201389    
+    ## ma1  -0.289241   0.452194  -0.6396 0.5224063    
+    ## sar1  0.237779   0.071974   3.3037 0.0009542 ***
+    ## sar2  0.069915   0.073303   0.9538 0.3401960    
+    ## sma1 -1.962158   0.147806 -13.2752 < 2.2e-16 ***
+    ## sma2  0.999880   0.150443   6.6463 3.007e-11 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
@@ -422,11 +423,11 @@ coeftest(sarima110_212)
     ## z test of coefficients:
     ## 
     ##       Estimate Std. Error  z value  Pr(>|z|)    
-    ## ar1   0.571877   0.050992  11.2150 < 2.2e-16 ***
-    ## sar1  0.293897   0.072837   4.0350 5.460e-05 ***
+    ## ar1   0.571876   0.050992  11.2150 < 2.2e-16 ***
+    ## sar1  0.293897   0.072837   4.0350 5.461e-05 ***
     ## sar2  0.103055   0.074400   1.3852     0.166    
-    ## sma1 -1.959113   0.121656 -16.1037 < 2.2e-16 ***
-    ## sma2  0.999845   0.123942   8.0670 7.204e-16 ***
+    ## sma1 -1.959113   0.121655 -16.1039 < 2.2e-16 ***
+    ## sma2  0.999845   0.123941   8.0671 7.200e-16 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
@@ -442,10 +443,10 @@ coeftest(sarima110_112)
     ## z test of coefficients:
     ## 
     ##       Estimate Std. Error z value  Pr(>|z|)    
-    ## ar1   0.563756   0.052987 10.6394 < 2.2e-16 ***
+    ## ar1   0.563756   0.052987 10.6395 < 2.2e-16 ***
     ## sar1  0.095058   0.221240  0.4297  0.667444    
-    ## sma1 -1.624653   0.239653 -6.7792 1.209e-11 ***
-    ## sma2  0.659874   0.253411  2.6040  0.009215 ** 
+    ## sma1 -1.624653   0.239652 -6.7792 1.208e-11 ***
+    ## sma2  0.659874   0.253410  2.6040  0.009215 ** 
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
@@ -462,11 +463,11 @@ coeftest(sarima111_112)
     ## z test of coefficients:
     ## 
     ##       Estimate Std. Error z value  Pr(>|z|)    
-    ## ar1   0.842431   0.053002 15.8942 < 2.2e-16 ***
-    ## ma1  -0.407793   0.085030 -4.7958 1.620e-06 ***
+    ## ar1   0.842431   0.053002 15.8943 < 2.2e-16 ***
+    ## ma1  -0.407793   0.085030 -4.7959 1.620e-06 ***
     ## sar1  0.232411   0.072297  3.2147  0.001306 ** 
-    ## sma1 -1.953156   0.323951 -6.0292 1.648e-09 ***
-    ## sma2  0.991817   0.329922  3.0062  0.002645 ** 
+    ## sma1 -1.953157   0.323934 -6.0295 1.645e-09 ***
+    ## sma2  0.991817   0.329904  3.0064  0.002644 ** 
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
@@ -482,13 +483,6 @@ aszerint melyik a legjobban illeszkedő modell. Ehhez először
 ``` r
 ts = ts(df$values, start = c(1997,1), end = c(2023,5), frequency = 12)
 autosarima = forecast::auto.arima(ts, seasonal = T)
-```
-
-    ## Registered S3 method overwritten by 'quantmod':
-    ##   method            from
-    ##   as.zoo.data.frame zoo
-
-``` r
 autosarima
 ```
 
@@ -511,12 +505,12 @@ coeftest(autosarima)
     ## z test of coefficients:
     ## 
     ##        Estimate Std. Error  z value  Pr(>|z|)    
-    ## ar1   0.7405260  0.0958223   7.7281 1.091e-14 ***
-    ## ma1  -1.3019349  0.1177215 -11.0594 < 2.2e-16 ***
-    ## ma2   0.3251233  0.1069429   3.0402  0.002365 ** 
-    ## sar1  0.0055917  0.5944184   0.0094  0.992494    
-    ## sma1 -0.6925649  0.5928341  -1.1682  0.242715    
-    ## sma2 -0.0611981  0.4393896  -0.1393  0.889229    
+    ## ar1   0.7405260  0.0958224   7.7281 1.092e-14 ***
+    ## ma1  -1.3019349  0.1177217 -11.0594 < 2.2e-16 ***
+    ## ma2   0.3251233  0.1069430   3.0402  0.002365 ** 
+    ## sar1  0.0055917  0.5944255   0.0094  0.992494    
+    ## sma1 -0.6925650  0.5928412  -1.1682  0.242721    
+    ## sma2 -0.0611981  0.4393949  -0.1393  0.889230    
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
@@ -685,6 +679,76 @@ végső SARIMA modellben nincsen ARCH hatás.
 
 # Előrejelzés a modellel
 
-Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg autgusztus
+Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg augusztus
 van, ezért meg tudom nézni, hogy a modellem milyen jól jelzi előre a
 júniusi és júliusi inflációt.
+
+Először is, az eredeti adathalmazból ki kell bányászni a teljes
+idősorból az eredeti adatokat a következő két időszakról.
+
+``` r
+test = euInf %>%
+  filter(geo == "HU", coicop == "CP00", time <= "2023-07-01" & time >= "2023-05-01") %>%
+  arrange(time) %>%
+  select(time, values)
+
+test_ts = ts(test$values, start = c(317), end = c(319))
+```
+
+Aztán az adatokat előre kell jelezzem és ábrázolni a becslést.
+
+``` r
+forecast = forecast(sarima111_112, h = 2)
+autoplot(forecast) + autolayer(test_ts) + theme_minimal()
+```
+
+![](arch_hun_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+
+``` r
+autoplot(forecast) + autolayer(test_ts) + xlim(300,320) + theme_minimal()
+```
+
+![](arch_hun_files/figure-gfm/unnamed-chunk-27-2.png)<!-- -->
+
+Két grafikont is készítettem, mivel az egész idősoron ábrázolva a
+nagysárendek miatt a két időszaknyi előrejelzés alíg látszik.
+
+A szűkített grafikonon a narancssárga vonal jelzi az eredeti adatokat,
+míg az előrejezések kékkel vannak. Azért előrejezések, mert ha jobban
+szemügyre vesszük három, egyre sötétebb kék intervallum van a képen. A
+legvilágosabb a 80%-os konfidencia intervallumot jelöli, a közepesen
+sötét a 95%-osat és az a nagyon sötét kék, ami alíg látszik a sárga
+vonal alatt, az a becsült érték. Jó hír, hogy alig látszik a szűkített
+grafikonon a becslés vonala, mivel ez azt jelenti, hogy majdnem pontosan
+rajta vannak az eredeti adatok.
+
+Táblázatba rendezve a következőket látjuk:
+
+| Hónap       | Eredeti adat | Becsült min. (95%) | Becsült közép | Becsült max (95%) |
+|:------------|:-------------|:-------------------|:--------------|:------------------|
+| 2023 június | 19,9         | 19,28              | 19,91         | 20,56             |
+| 2023 július | 17,5         | 16,61              | 17,72         | 18,84             |
+
+A júniusi inflációt a modell közel tökéletesen megbecsülte. A Júlusi
+inflációt túlbecsülte, azonban csupán két százalékponttal.
+
+``` r
+accuracy(forecast(sarima111_112, h = 2), test$values[2:3])
+```
+
+    ##                       ME      RMSE       MAE        MPE      MAPE      MASE
+    ## Training set  0.05667526 0.4703304 0.3398963        Inf       Inf 0.7376870
+    ## Test set     -0.12041875 0.1576935 0.1204188 -0.6816972 0.6816972 0.2613484
+    ##                      ACF1
+    ## Training set -0.003192292
+    ## Test set               NA
+
+Mivel nagyon rövid időszakra jeleztem előre, ezért ki sem tud számolni a
+függvény egyes mutatókat. Ami érdekes lehet az az RMSE és MAPE, utóbbi
+azonban ugye nem áll rendelkezésre. Az RMSE az átlagosan elkövetett hiba
+az idősor mértékegységében, azaz most százalékpontban. Ez a mutató az
+egész idősorra visszamérve 0,470 százalékpont, míg a valós előrejelzés
+0,158 százalékpont. Ez szerintem igencsak apró hiba, hiszen a KSH egy
+tizedesjegy pontossággal állapítja meg az inflációt, amihez mérve ez a
+legkisebb egység másfélszerese. A modellt megfelelőnek találom,
+elégedett vagyok az eredméynekkel.

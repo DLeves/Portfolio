@@ -28,6 +28,7 @@ library(tidyverse)
 library(aTSA)
 library(lmtest)
 library(FinTS)
+library(forecast)
 ```
 
 ## Adatok lekérése
@@ -281,7 +282,6 @@ Az ARIMA(p,q) modell éltalénos egyenlete a következő:
 
 $Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + u_{t}$
 
-
 A SARIMA(p,q)[P,Q]m modell általános egyenlete:
 
 $Y_{t} = c + \sum_{i=1}^{p} \phi_{i} Y_{t-i} + \sum_{j=1}^{q} \theta_{j} u_{t-j} + \sum_{k=1}^{P} \Phi_{j} Y_{t-k \times m} + \sum_{l=1}^{Q} \Theta_{l} u_{t-l \times m} + u_{t}$
@@ -317,9 +317,42 @@ A teszt p-értéke 8,8%, ami azt jelenti, hogy 10%-os szignifikancia szint melle
 
 # Előrejelzés a modellel
 
-Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg autgusztus van, ezért meg tudom nézni, hogy a modellem milyen jól jelzi előre a júniusi és júliusi inflációt.
+Mivel a modell 2023 májusáig tartalmaz adatokat és jelenleg augusztus van, ezért meg tudom nézni, hogy a modellem milyen jól jelzi előre a júniusi és júliusi inflációt.
+
+Először is, az eredeti adathalmazból ki kell bányászni a teljes idősorból az eredeti adatokat a következő két időszakról.
 
 ```{r}
+test = euInf %>%
+  filter(geo == "HU", coicop == "CP00", time <= "2023-07-01" & time >= "2023-05-01") %>%
+  arrange(time) %>%
+  select(time, values)
 
+test_ts = ts(test$values, start = c(317), end = c(319))
 ```
 
+Aztán az adatokat előre kell jelezzem és ábrázolni a becslést.
+
+```{r, warning=FALSE, message=FALSE}
+forecast = forecast(sarima111_112, h = 2)
+autoplot(forecast) + autolayer(test_ts) + theme_minimal()
+autoplot(forecast) + autolayer(test_ts) + xlim(300,320) + theme_minimal()
+```
+
+Két grafikont is készítettem, mivel az egész idősoron ábrázolva a nagysárendek miatt a két időszaknyi előrejelzés alíg látszik.
+
+A szűkített grafikonon a narancssárga vonal jelzi az eredeti adatokat, míg az előrejezések kékkel vannak. Azért előrejezések, mert ha jobban szemügyre vesszük három, egyre sötétebb kék intervallum van a képen. A legvilágosabb a 80%-os konfidencia intervallumot jelöli, a közepesen sötét a 95%-osat és az a nagyon sötét kék, ami alíg látszik a sárga vonal alatt, az a becsült érték. Jó hír, hogy alig látszik a szűkített grafikonon a becslés vonala, mivel ez azt jelenti, hogy majdnem pontosan rajta vannak az eredeti adatok.
+
+Táblázatba rendezve a következőket látjuk:
+
+| Hónap       | Eredeti adat | Becsült min. (95%) | Becsült közép | Becsült max (95%) |
+|:--------------|:--------------|:--------------|:--------------|:--------------|
+| 2023 június | 19,9         | 19,28              | 19,91         | 20,56             |
+| 2023 július | 17,5         | 16,61              | 17,72         | 18,84             |
+
+A júniusi inflációt a modell közel tökéletesen megbecsülte. A Júlusi inflációt túlbecsülte, azonban csupán két százalékponttal.
+
+```{r}
+accuracy(forecast(sarima111_112, h = 2), test$values[2:3])
+```
+
+Mivel nagyon rövid időszakra jeleztem előre, ezért ki sem tud számolni a függvény egyes mutatókat. Ami érdekes lehet az az RMSE és MAPE, utóbbi azonban ugye nem áll rendelkezésre. Az RMSE az átlagosan elkövetett hiba az idősor mértékegységében, azaz most százalékpontban. Ez a mutató az egész idősorra visszamérve 0,470 százalékpont, míg a valós előrejelzés 0,158 százalékpont. Ez szerintem igencsak apró hiba, hiszen a KSH egy tizedesjegy pontossággal állapítja meg az inflációt, amihez mérve ez a legkisebb egység másfélszerese. A modellt megfelelőnek találom, elégedett vagyok az eredméynekkel.
