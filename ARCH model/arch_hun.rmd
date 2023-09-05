@@ -349,10 +349,10 @@ Táblázatba rendezve a következőket látjuk:
 | 2023 június | 19,9         | 19,28              | 19,91         | 20,56             |
 | 2023 július | 17,5         | 16,61              | 17,72         | 18,84             |
 
-A júniusi inflációt a modell közel tökéletesen megbecsülte. A Júlusi inflációt túlbecsülte, azonban csupán két százalékponttal.
+A júniusi inflációt a modell közel tökéletesen megbecsülte. A Júlusi inflációt túlbecsülte, azonban csupán két tized százalékponttal.
 
 ```{r}
 accuracy(forecast(sarima111_112, h = 2), test$values[2:3])
 ```
 
-Mivel nagyon rövid időszakra jeleztem előre, ezért ki sem tud számolni a függvény egyes mutatókat. Ami érdekes lehet az az RMSE és MAPE, utóbbi azonban ugye nem áll rendelkezésre. Az RMSE az átlagosan elkövetett hiba az idősor mértékegységében, azaz most százalékpontban. Ez a mutató az egész idősorra visszamérve 0,470 százalékpont, míg a valós előrejelzés 0,158 százalékpont. Ez szerintem igencsak apró hiba, hiszen a KSH egy tizedesjegy pontossággal állapítja meg az inflációt, amihez mérve ez a legkisebb egység másfélszerese. A modellt megfelelőnek találom, elégedett vagyok az eredméynekkel.
+Mivel nagyon rövid időszakra jeleztem előre, ezért ki sem tud számolni a függvény egyes mutatókat. Ami érdekes lehet az az RMSE és MAPE, utóbbi azonban ugye nem áll rendelkezésre. Az RMSE az átlagosan elkövetett hiba az idősor mértékegységében, azaz most százalékpontban. Ez a mutató az egész idősorra visszamérve 0,470 százalékpont, míg a valós előrejelzés 0,158 százalékpont. Ez szerintem igencsak apró hiba, hiszen a KSH egy tizedesjegy pontossággal állapítja meg az inflációt, amihez mérve ez a legkisebb egység másfélszerese. A modellt megfelelőnek találom, elégedett vagyok az eredményekkel.
